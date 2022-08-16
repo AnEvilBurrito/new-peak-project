@@ -130,3 +130,6 @@ dmypy.json
 
 # local history
 .history/
+
+# venv folder 
+new-peak-project/

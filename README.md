@@ -3,7 +3,7 @@ a revised workspace for modelling the PEAK family scaffolds
 
 ## Docker / vscode dev environment 
 
-Successfully set up 
+Successfully set up, docker image can be built on Github Codespaces, enabling cloud-based environment on browser 
 
 ## Using python 3 venv 
 

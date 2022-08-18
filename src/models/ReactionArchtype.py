@@ -9,8 +9,10 @@ class ReactionArchtype:
         products: Tuple[str], 
         parameters: Tuple[str], 
         rate_law: str, 
+        extra_states: Tuple[str] = (),
         assume_parameters_values: Union[dict, tuple] = None,
-        assume_product_name: bool = False
+        assume_reactant_values: Union[dict, tuple] = None,
+        assume_product_values: Union[dict, tuple] = None
     '''
 
     def __init__(self, 
@@ -19,22 +21,21 @@ class ReactionArchtype:
         products: Tuple[str], 
         parameters: Tuple[str], 
         rate_law: str, 
-        assume_parameters_values: Union[dict, tuple] = None,
-        assume_reactant_values: Union[dict, tuple] = None,
-        assume_product_values: Union[dict, tuple] = None,
-        assume_product_name: bool = False):
+        extra_states: Tuple[str] = (),
+        assume_parameters_values: Union[dict, tuple, None] = None,
+        assume_reactant_values: Union[dict, tuple, None] = None,
+        assume_product_values: Union[dict, tuple, None] = None):
 
         assert len(reactants) == len(set(reactants)), 'reactants must be unique'
         assert len(products) == 0 or len(products) == len(set(products)), 'products must be unique'
-        if not assume_product_name:
-            assert products is not None, 'products must be specified if assume_product_name is False'
+        assert len(parameters) == len(set(parameters)), 'parameters must be unique'
+        assert len(extra_states) == len(set(extra_states)), 'extra_states must be unique'
         
         self.name = name
         self.reactants = reactants
         self.products = products
-        if assume_product_name: 
-            self.products = ()
         self.parameters = parameters
+        self.extra_states = extra_states
         self.rate_law = rate_law
 
         self.reactants_count = len(reactants)
@@ -52,27 +53,22 @@ class ReactionArchtype:
     def validate_rate_law(self, rate_law) -> bool:
         '''
         this function validates the rate_law against the archtype
-            It expects the rate_law to be a string that contains the reactants and products
             It expects the rate_law to contain the parameters
+            It expects the rate_law to contain the extra states
             ^ copilot generated
         '''
-
-        
-        for reactant in self.reactants:
-            if rate_law.find(reactant) == -1:
-                raise ValueError(f'{reactant} is not in the rate law')
-        
-        for product in self.products:
-            if rate_law.find(product) == -1:
-                raise ValueError(f'{product} is not in the rate law')
 
         for parameter in self.parameters:
             if rate_law.find(parameter) == -1:
                 raise ValueError(f'{parameter} is not in the rate law')
 
+        for extra_state in self.extra_states:
+            if rate_law.find(extra_state) == -1:
+                raise ValueError(f'{extra_state} is not in the rate law')
+
         return True
 
-    def _abstract_validate_values(self, values: Union[tuple, dict], contained_list: Tuple) -> bool:
+    def _abstract_validate_values(self, values: Union[tuple, dict, None], contained_list: Tuple) -> bool:
         
         '''
         this function validates the values against the archtype
@@ -85,6 +81,9 @@ class ReactionArchtype:
             cannot have dict keys that are not in self.parameters 
         
         '''
+
+        if values is None:
+            return True
 
         if len(values) > len(contained_list):
                 raise ValueError('length of assumed_parameter_values is greater than the number of parameters in the archtype')
@@ -114,13 +113,13 @@ class ReactionArchtype:
         return self._abstract_validate_values(reactant_values, reactant_list)
 
 
-    def validate_product_values(self, product_values) -> bool:
+    def validate_product_values(self, product_values, products_list) -> bool:
 
         '''
         Delegate to abstract implementation at _abstract_validate_values 
         '''
 
-        return self._abstract_validate_values(product_values, self.products)
+        return self._abstract_validate_values(product_values, products_list)
             
 
     def __str__(self) -> str:

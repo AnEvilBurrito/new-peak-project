@@ -1,12 +1,16 @@
 # The following function generates antimony strings from high level syntax
-from typing import List
-from .Reaction import Reaction
 
+from typing import List
 import antimony
 import roadrunner
-import matplotlib.pyplot as plt
+
+from .Reaction import Reaction
 
 class ModelBuilder:
+
+    '''
+    Docstring
+    '''
 
     def __init__(self, name):
         self.name = name
@@ -32,11 +36,11 @@ class ModelBuilder:
             # first, get the parameters names from the archtype
             # and perform naming rule
 
-            '''
-            Here, a simple naming rule is implemented. It simply appends the reaction index 
-            to the parameter name
-            TODO: implement more complex naming rules in the future 
-            '''
+            
+            #Here, a simple naming rule is implemented. It simply appends the reaction index 
+            #to the parameter name
+            #TODO: implement more complex naming rules in the future 
+            
             r_index = f'J{i}'
 
             parameters.update(r.get_reaction_parameters(r_index))
@@ -61,6 +65,9 @@ class ModelBuilder:
         return states_list
 
     def add_reaction(self, reaction: Reaction):
+        '''
+        Doc
+        '''
         self.reactions.append(reaction)
         # NOTE: This is an ugly hack to make sure the reaction is added to the model
         # TODO: find a better way to do this
@@ -68,7 +75,9 @@ class ModelBuilder:
         self.parameters.update(self.get_parameters())
 
     def get_antimony_model(self):
-
+        '''
+        Doc
+        '''
         antimony_string = ''
 
         antimony_string += f'model {self.name}\n\n'
@@ -101,6 +110,10 @@ class ModelBuilder:
         return antimony_string
     
     def get_sbml_model(self) -> str:
+
+        '''
+        Doc
+        '''
         
         ant_model = self.get_antimony_model()
         antimony.clearPreviousLoads()
@@ -113,9 +126,9 @@ class ModelBuilder:
 
         return ''
 
-    '''
-    These two functions are testing helpers only, not to use in practice
-    '''
+    
+    # These two functions are testing helpers only, not to use in practice
+    
 
     def simulate(self, start: float, end: float, step: float):
         '''

@@ -13,6 +13,8 @@ new-peak-project\Scripts\activate.ps1
 
 pip install -r requirements.txt 
 
+pip uninstall -y -r <(pip freeze) # remove all packages, use with care
+
 ## Requirements
 
 Python 3.8.x 

@@ -12,6 +12,11 @@ class Reaction:
         parameters_values: Union[dict, tuple] = (),
         reactant_values: Union[dict, tuple] = (),
         product_values: Union[dict, tuple] = ()
+                
+    NOTE: This class performs two types of matching:
+        1. Index-based matching.
+        2. Name-based matching < - far more reliable but difficult to implement
+        
     '''
     def __init__(self, 
         reaction_archtype: ReactionArchtype, 
@@ -22,12 +27,6 @@ class Reaction:
         reactant_values: Union[dict, tuple, int, float] = (),
         product_values: Union[dict, tuple, int, float] = ()):
 
-
-        '''
-        NOTE: This class performs two types of matching: 
-        1. Index-based matching. 
-        2. Name-based matching <- far more reliable but difficult to implement
-        '''
         self.archtype = reaction_archtype
         # reactants, products and extra states must be provided in the length of the archtype
         
@@ -65,6 +64,9 @@ class Reaction:
         assert len(self.parameters_values) == self.archtype.parameters_count or len(self.archtype.assume_parameters_values) > 0, f'Since, archtype do not have assumed parameters, length of parameters_values must be equal to the number of parameters in the reaction archtype, {len(parameters_values)} != {len(self.archtype.parameters)}'
         assert len(self.reactant_values) == self.archtype.reactants_count or len(self.archtype.assume_reactant_values) > 0, f'Since, archtype do not have assumed reactant values, length of reactant_values must be equal to the number of reactants in the reaction, {len(reactant_values)} != {len(reactants)}'
         assert len(self.product_values) == self.archtype.products_count or len(self.archtype.assume_product_values) > 0, f'Since, archtype do not have assumed product values, length of product_values must be equal to the number of products in the reaction, {len(product_values)} != {len(products)}'
+
+        self.reversible = self.archtype.reversible
+        self.unique_reverse_parameters = self.archtype.unique_reverse_parameters
 
     def _unify_value_types_to_dict(self, values: Union[dict, tuple, int, float], names: Tuple[str]) -> Dict[str, float]:
         '''
@@ -211,6 +213,48 @@ class Reaction:
             i += 1
 
         return f'{r_index}: {reactant_str} -> {product_str}; {rate_law_str}'
+
+    def get_antimony_reactions_reverse_str(self, r_index: str) -> str:
+        '''
+        generates an antimony string for the reverse reaction, given the index of the reaction 
+            r_index: str, represents reaction name in the system, usually an simple index 
+        
+        '''
+        reactant_str = ' + '.join(self.products_names)
+        product_str = ' + '.join(self.reactants_names)
+        rate_law_str = self.archtype.rate_law 
+        # rate law substitution needs to occur for reactants, products, extra states and parameters
+        i = 0 
+        while i < len(self.reactants_names):
+            archtype_name = self.archtype.products[i]
+            replacement_name = self.reactants_names[i]
+            rate_law_str = rate_law_str.replace(archtype_name, replacement_name)
+            i += 1 
+            
+        i = 0
+        while i < len(self.products_names):
+            archtype_name = self.archtype.reactants[i]
+            replacement_name = self.products_names[i]
+            rate_law_str = rate_law_str.replace(archtype_name, replacement_name)
+            i += 1
+
+        i = 0
+        while i < len(self.archtype.extra_states):
+            archtype_name = self.archtype.extra_states[i]
+            replacement_name = self.extra_states[i]
+            rate_law_str = rate_law_str.replace(archtype_name, replacement_name)
+            i += 1
+
+        i = 0
+        while i < len(self.archtype.parameters):
+            archtype_name = self.archtype.parameters[i]
+            replacement_name = r_index + '_' + archtype_name
+            rate_law_str = rate_law_str.replace(archtype_name, str(replacement_name))
+            i += 1
+
+        return f'{r_index}: {product_str} -> {reactant_str}; {rate_law_str}'
+
+
 
     def __str__(self) -> str:
         

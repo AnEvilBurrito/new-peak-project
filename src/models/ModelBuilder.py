@@ -1,10 +1,11 @@
 # The following function generates antimony strings from high level syntax
 
-from typing import List
+from typing import List, Union, Tuple
 import antimony
 import roadrunner
 
 from .Reaction import Reaction
+from .ReactionArchtype import ReactionArchtype
 
 class ModelBuilder:
 
@@ -74,6 +75,35 @@ class ModelBuilder:
         self.states.update(self.get_state_variables())
         self.parameters.update(self.get_parameters())
 
+    def add_reaction_test(self, reaction_archtype: ReactionArchtype,
+                     reactants: Tuple[str],
+                     products: Tuple[str],
+                     extra_states: Tuple[str] = (),
+                     parameters_values: Union[dict, tuple, int, float] = (),
+                     reactant_values: Union[dict, tuple, int, float] = (),
+                     product_values: Union[dict, tuple, int, float] = ()):
+        
+        '''
+        Docstring, consider specialised parameter assignment syntax 
+        symbol @{idx}_{param_name}: inject parameter name from reaction idx's parameter param_name 
+        symbol %-{idx}_{param_name}: given parameter i, inject parameter name from reaction i-idx parameter param_name (relative)
+        symbol ${param_name}: inject parameter name from global parameter param_name, global parameters have fixed names 
+        '''
+        reaction = Reaction(reaction_archtype, reactants, products, extra_states, parameters_values, reactant_values, product_values)
+        pass 
+
+    def inject_antimony_string_at(self, ant_string: str, position: str = 'reaction'):
+
+        '''
+        position can only be in str: top, reaction, state, parameters, end 
+        '''
+
+    def add_simple_piecewise(self, before_value: float, activation_time: float, after_value: float, state_name: str):
+        '''
+        Adds a simple piecewise function to the state variable state_name
+        '''
+        pass 
+
     def get_antimony_model(self):
         '''
         Doc
@@ -124,7 +154,7 @@ class ModelBuilder:
             sbml_model = antimony.getSBMLString(mid)
             return sbml_model
 
-        return ''
+        raise Exception('Error in loading antimony model')
 
     
     # These two functions are testing helpers only, not to use in practice

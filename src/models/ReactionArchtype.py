@@ -24,7 +24,9 @@ class ReactionArchtype:
         extra_states: Tuple[str] = (),
         assume_parameters_values: Union[dict, tuple, None] = None,
         assume_reactant_values: Union[dict, tuple, None] = None,
-        assume_product_values: Union[dict, tuple, None] = None):
+        assume_product_values: Union[dict, tuple, None] = None,
+        reversible: bool = False,
+        unique_reverse_parameters: bool = False):
 
         assert len(reactants) == len(set(reactants)), 'reactants must be unique'
         assert len(products) == 0 or len(products) == len(set(products)), 'products must be unique'
@@ -56,6 +58,9 @@ class ReactionArchtype:
         self.assume_parameters_values = self._convert_tuple_to_dict(assume_parameters_values, parameters)
         self.assume_reactant_values = self._convert_tuple_to_dict(assume_reactant_values, reactants)
         self.assume_product_values = self._convert_tuple_to_dict(assume_product_values, products)
+
+        self.reversible = reversible
+        self.unique_reverse_parameters = unique_reverse_parameters
 
     def _convert_tuple_to_dict(self, tuple: Union[dict, tuple, None], reference_tuple: Tuple[str]) -> dict:
         '''

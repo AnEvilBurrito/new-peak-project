@@ -41,14 +41,43 @@ class ReactionArchtype:
         self.reactants_count = len(reactants)
         self.products_count = len(products)
         self.state_variables_count = len(reactants) + len(products)
+        self.extra_states_count = len(extra_states)
         self.parameters_count = len(parameters)
 
-        self.assume_parameters_values = assume_parameters_values
 
         self.validate_rate_law(rate_law)
         self.validate_parameters(assume_parameters_values, parameters)
         self.validate_reactant_values(assume_reactant_values, reactants)
         self.validate_product_values(assume_product_values, products)
+
+        # assumed values are used to fill in the missing values in the rate law
+        # always update None or tuple into dict objects, so that Reaction class
+        # only uses dict to handle assumed values logic 
+        self.assume_parameters_values = self._convert_tuple_to_dict(assume_parameters_values, parameters)
+        self.assume_reactant_values = self._convert_tuple_to_dict(assume_reactant_values, reactants)
+        self.assume_product_values = self._convert_tuple_to_dict(assume_product_values, products)
+
+    def _convert_tuple_to_dict(self, tuple: Union[dict, tuple, None], reference_tuple: Tuple[str]) -> dict:
+        '''
+        this function converts a tuple to a dict by 
+        referring i-th element in the tuple to the i-th element in the reference_tuple
+        '''
+        # do not do anything if tuple is dict 
+        if isinstance(tuple, dict):
+            return tuple
+
+        if tuple is None:
+            return {}
+        elif len(tuple) == 0: 
+            return {}
+
+        new_dict = {}
+        for idx, value in enumerate(tuple):
+            key = reference_tuple[idx]
+            new_dict[key] = value
+        
+        return new_dict
+
 
     def validate_rate_law(self, rate_law) -> bool:
         '''
@@ -85,8 +114,8 @@ class ReactionArchtype:
         if values is None:
             return True
 
-        if len(values) > len(contained_list):
-                raise ValueError('length of assumed_parameter_values is greater than the number of parameters in the archtype')
+        if len(values) != len(contained_list):
+                raise ValueError(f'length of {values} is not the same as the archtype {contained_list}')
 
         if isinstance(values, dict):
             for key in values:

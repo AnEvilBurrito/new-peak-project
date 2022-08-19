@@ -1,4 +1,4 @@
-from typing import Union, Tuple, List 
+from typing import Dict, Union, Tuple
 from .ReactionArchtype import ReactionArchtype
 
 class Reaction: 
@@ -18,27 +18,158 @@ class Reaction:
         reactants: Tuple[str], 
         products: Tuple[str], 
         extra_states: Tuple[str] = (),
-        parameters_values: Union[dict, tuple] = (),
-        reactant_values: Union[dict, tuple] = (),
-        product_values: Union[dict, tuple] = ()):
+        parameters_values: Union[dict, tuple, int, float] = (),
+        reactant_values: Union[dict, tuple, int, float] = (),
+        product_values: Union[dict, tuple, int, float] = ()):
 
-        # TODO: perform some error checking on the input
+
+        '''
+        NOTE: This class performs two types of matching: 
+        1. Index-based matching. 
+        2. Name-based matching <- far more reliable but difficult to implement
+        '''
+        self.archtype = reaction_archtype
+        # reactants, products and extra states must be provided in the length of the archtype
         
-
         assert len(reactants) == reaction_archtype.reactants_count, f'length of reactants must be equal to the number of reactants in the reaction archtype, {len(reactants)} != {reaction_archtype.reactants_count}'
         assert len(products) == reaction_archtype.products_count, f'length of products must be equal to the number of products in the reaction archtype, {len(products)} != {reaction_archtype.products_count}'
-        assert reaction_archtype.validate_parameters(parameters_values, reaction_archtype.parameters), 'parameters_values must be valid, see implementation of validate_parameters in ReactionArchtype'
+        assert len(extra_states) == reaction_archtype.extra_states_count, f'length of extra_states must be equal to the number of extra_states in the reaction archtype, {len(extra_states)} != {reaction_archtype.extra_states_count}'
 
-        self.archtype = reaction_archtype
+        if isinstance(parameters_values, dict):
+            assert self._exist_in_archtype(parameters_values, self.archtype.parameters), 'parameters_values supplied in dict format must match the parameter names in the archtype'
+        
+        if isinstance(reactant_values, dict):
+            assert self._dict_vals_exist_in_tuple(reactant_values, reactants), 'reactant_values supplied in dict format must match the reactant names in the reaction'
+
+        if isinstance(product_values, dict):
+            assert self._dict_vals_exist_in_tuple(product_values, products), 'product_values supplied in dict format must match the product names in the reaction'
+
         # must specify reactant, product and extra state names if given in rate law
         self.reactants_names = reactants    
         self.products_names = products
         self.extra_states = extra_states
 
+        # need to map reactant, product and extra state names to archtype names in 
+        # the forms of dict 
+        self.reactant_names_to_archtype_names = self._direct_tuples_to_dict(reactants, reaction_archtype.reactants)
+        self.product_names_to_archtype_names = self._direct_tuples_to_dict(products, reaction_archtype.products)
+        self.extra_states_names_to_archtype_names = self._direct_tuples_to_dict(extra_states, reaction_archtype.extra_states)
+
         # override values if provided
-        self.parameters_values = parameters_values
-        self.reactant_values = reactant_values
-        self.product_values = product_values
+        self.parameters_values = self._unify_value_types_to_dict(parameters_values, self.archtype.parameters)
+        self.reactant_values = self._unify_value_types_to_dict(reactant_values, reactants)
+        self.product_values = self._unify_value_types_to_dict(product_values, products)
+
+        # checking assumed values existence for validation logic on reaction values assignment 
+
+        assert len(self.parameters_values) == self.archtype.parameters_count or len(self.archtype.assume_parameters_values) > 0, f'Since, archtype do not have assumed parameters, length of parameters_values must be equal to the number of parameters in the reaction archtype, {len(parameters_values)} != {len(self.archtype.parameters)}'
+        assert len(self.reactant_values) == self.archtype.reactants_count or len(self.archtype.assume_reactant_values) > 0, f'Since, archtype do not have assumed reactant values, length of reactant_values must be equal to the number of reactants in the reaction, {len(reactant_values)} != {len(reactants)}'
+        assert len(self.product_values) == self.archtype.products_count or len(self.archtype.assume_product_values) > 0, f'Since, archtype do not have assumed product values, length of product_values must be equal to the number of products in the reaction, {len(product_values)} != {len(products)}'
+
+    def _unify_value_types_to_dict(self, values: Union[dict, tuple, int, float], names: Tuple[str]) -> Dict[str, float]:
+        '''
+        unifies the value types to dict if not already in dict format
+        '''
+        if isinstance(values, dict):
+            return values
+        elif isinstance(values, tuple):
+            return {names[i]: values[i] for i in range(len(values))}
+        else:
+            return {names[0]: values}
+
+    def _dict_vals_exist_in_tuple(self, dict_vals: Dict[str, str], tuple_vals: Tuple[str]) -> bool:
+        '''
+        checks if all the values in the dict exist in the tuple
+        '''
+        for val in dict_vals.keys():
+            if val not in tuple_vals:
+                return False
+        return True
+
+    def _exist_in_archtype(self, reaction_dict: Dict[str, str], archtype_dict: Dict[str, str]) -> bool:
+        '''
+        checks if all the keys in the reaction dict exist in the archtype dict
+        '''
+        for key in reaction_dict:
+            if key not in archtype_dict:
+                return False
+        return True
+
+    def _direct_tuples_to_dict(self, reaction_tuple, archtype_tuple) -> Dict:
+        '''
+        maps a tuple of reaction-based names to the archtype-based names
+        '''
+        return {reaction_tuple[i]: archtype_tuple[i] for i in range(len(archtype_tuple))}
+
+    def get_reaction_parameters(self, r_index) -> Dict[str, float]:
+        '''
+        returns a dictionary of the parameters in the reaction
+        '''
+
+        parameter_names = []
+
+        i = 0
+        while i < len(self.archtype.parameters):
+            archtype_name = self.archtype.parameters[i]
+            replacement_name = r_index + '_' + archtype_name
+            parameter_names.append(replacement_name)
+            i += 1
+
+        parameters = {}
+        if len(self.archtype.assume_parameters_values) > 0: 
+            # if the reaction archtype has parameters_values specified, use those
+            # to create a dictionary 
+            parameters = {f'{r_index}_{key}': 0 for key in self.archtype.parameters}
+            for key, val in self.archtype.assume_parameters_values.items():
+                parameters[f'{r_index}_{key}'] = val
+            
+        # override parameters if provided
+        if len(self.parameters_values) > 0: 
+            # if the specific reaction has parameters_values specified, 
+            # it will override the default values
+            if isinstance(self.parameters_values, dict):
+                for key, val in self.parameters_values.items():
+                    parameters[f'{r_index}_{key}'] = val
+            
+            else:
+                raise ValueError('parameters_values must be a dictionary or tuple')
+
+        return parameters
+
+    def get_reaction_states(self) -> Dict[str, float]:
+
+        '''
+        Extracts state variables and their values from all reactions
+        in the class and returns a dict, where state variables are 
+        the reactants and products
+
+        non-unique state variables will only be repeated once, their 
+        default value will only follow the first repeated state variable
+        '''
+
+        states = {}
+        for reactant in self.reactants_names:
+            states[reactant] = self.archtype.assume_reactant_values[self.reactant_names_to_archtype_names[reactant]]
+        for product in self.products_names:
+            states[product] = self.archtype.assume_product_values[self.product_names_to_archtype_names[product]]
+
+        # override values if provided
+        if len(self.reactant_values) > 0:
+            if isinstance(self.reactant_values, dict):
+                for key, val in self.reactant_values.items():
+                    states[key] = val
+            else:
+                raise ValueError('reactant_values must be a dictionary or tuple')
+
+        if len(self.product_values) > 0:
+            if isinstance(self.product_values, dict):
+                for key, val in self.product_values.items():
+                    states[key] = val 
+            else:
+                raise ValueError('product_values must be a dictionary or tuple')
+
+        return states
+        
 
 
     def get_antimony_reaction_str(self, r_index: str) -> str:

@@ -2,6 +2,9 @@
 from typing import List
 from .Reaction import Reaction
 
+import antimony
+import roadrunner
+import matplotlib.pyplot as plt
 
 class ModelBuilder:
 
@@ -9,11 +12,12 @@ class ModelBuilder:
         self.name = name
         self.reactions: List[Reaction] = []
         # co-pilot generated, not sure if this is necessary
-        self.ant_model = ''
-        self.sbml_model = ''
-        self.r_model = ''
-        self.r_solved = ''
-        self.r_plot = ''
+
+        self.states = {}
+        self.parameters = {}
+
+        self.r_model = None 
+        self.r_solved = None 
 
     def get_parameters(self):
         '''
@@ -21,8 +25,6 @@ class ModelBuilder:
         in the class and returns a dict while subjecting to a naming rule 
         
         '''
-
-        parameters_names = []
         parameters = {}
         i = 0
         while i < len(self.reactions):
@@ -60,8 +62,12 @@ class ModelBuilder:
 
     def add_reaction(self, reaction: Reaction):
         self.reactions.append(reaction)
+        # NOTE: This is an ugly hack to make sure the reaction is added to the model
+        # TODO: find a better way to do this
+        self.states.update(self.get_state_variables())
+        self.parameters.update(self.get_parameters())
 
-    def compile_antimony(self):
+    def get_antimony_model(self):
 
         antimony_string = ''
 
@@ -93,3 +99,41 @@ class ModelBuilder:
         antimony_string += '\nend'
 
         return antimony_string
+    
+    def get_sbml_model(self) -> str:
+        
+        ant_model = self.get_antimony_model()
+        antimony.clearPreviousLoads()
+        antimony.freeAll()
+        code = antimony.loadAntimonyString(ant_model)
+        if code >= 0:
+            mid = antimony.getMainModuleName()
+            sbml_model = antimony.getSBMLString(mid)
+            return sbml_model
+
+        return ''
+
+    '''
+    These two functions are testing helpers only, not to use in practice
+    '''
+
+    def simulate(self, start: float, end: float, step: float):
+        '''
+        Simulates the model using roadrunner and returns the results
+        '''
+
+        roadrunner_model = roadrunner.RoadRunner(self.get_sbml_model())
+        self.r_model = roadrunner_model
+        r_solved = roadrunner_model.simulate(start, end, step)
+        self.r_solved = r_solved
+        return r_solved
+
+    def plot(self):
+        '''
+        Plots the results of the simulation
+        '''
+        self.r_model.plot()
+
+        
+
+        

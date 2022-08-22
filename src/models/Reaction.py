@@ -65,6 +65,7 @@ class Reaction:
         assert len(self.reactant_values) == self.archtype.reactants_count or len(self.archtype.assume_reactant_values) > 0, f'Since, archtype do not have assumed reactant values, length of reactant_values must be equal to the number of reactants in the reaction, {len(reactant_values)} != {len(reactants)}'
         assert len(self.product_values) == self.archtype.products_count or len(self.archtype.assume_product_values) > 0, f'Since, archtype do not have assumed product values, length of product_values must be equal to the number of products in the reaction, {len(product_values)} != {len(products)}'
 
+        # reversibility unchangable in Reaction, but only in Archtype
         self.reversible = self.archtype.reversible
         self.unique_reverse_parameters = self.archtype.unique_reverse_parameters
 

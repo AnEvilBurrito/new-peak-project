@@ -223,7 +223,7 @@ class Reaction:
         '''
         reactant_str = ' + '.join(self.products_names)
         product_str = ' + '.join(self.reactants_names)
-        rate_law_str = self.archtype.rate_law 
+        rate_law_str = self.archtype.reverse_rate_law 
         # rate law substitution needs to occur for reactants, products, extra states and parameters
         i = 0 
         while i < len(self.reactants_names):
@@ -259,4 +259,7 @@ class Reaction:
 
     def __str__(self) -> str:
         
+        if self.archtype.reversible:
+            return self.get_antimony_reaction_str(r_index='for') + '\n' + self.get_antimony_reactions_reverse_str(r_index='rev')
+
         return self.get_antimony_reaction_str(r_index='react')

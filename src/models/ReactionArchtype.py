@@ -26,12 +26,13 @@ class ReactionArchtype:
         assume_reactant_values: Union[dict, tuple, None] = None,
         assume_product_values: Union[dict, tuple, None] = None,
         reversible: bool = False,
-        unique_reverse_parameters: bool = False):
+        reverse_rate_law: str = None):
 
         assert len(reactants) == len(set(reactants)), 'reactants must be unique'
         assert len(products) == 0 or len(products) == len(set(products)), 'products must be unique'
         assert len(parameters) == len(set(parameters)), 'parameters must be unique'
         assert len(extra_states) == len(set(extra_states)), 'extra_states must be unique'
+        assert reversible is False or reverse_rate_law is not None, 'reverse_rate_law must be provided if reversible is True'
         
         self.name = name
         self.reactants = reactants
@@ -40,14 +41,20 @@ class ReactionArchtype:
         self.extra_states = extra_states
         self.rate_law = rate_law
 
+        # reverse reaction between reactants and products
+        self.reversible = reversible
+        self.reverse_rate_law = reverse_rate_law
+
         self.reactants_count = len(reactants)
         self.products_count = len(products)
         self.state_variables_count = len(reactants) + len(products)
         self.extra_states_count = len(extra_states)
         self.parameters_count = len(parameters)
 
-
-        self.validate_rate_law(rate_law)
+        if reversible:
+            self.validate_rate_laws(rate_law, reverse_rate_law)
+        else:
+            self.validate_rate_law(rate_law)
         self.validate_parameters(assume_parameters_values, parameters)
         self.validate_reactant_values(assume_reactant_values, reactants)
         self.validate_product_values(assume_product_values, products)
@@ -59,8 +66,7 @@ class ReactionArchtype:
         self.assume_reactant_values = self._convert_tuple_to_dict(assume_reactant_values, reactants)
         self.assume_product_values = self._convert_tuple_to_dict(assume_product_values, products)
 
-        self.reversible = reversible
-        self.unique_reverse_parameters = unique_reverse_parameters
+
 
     def _convert_tuple_to_dict(self, tuple: Union[dict, tuple, None], reference_tuple: Tuple[str]) -> dict:
         '''
@@ -99,6 +105,24 @@ class ReactionArchtype:
         for extra_state in self.extra_states:
             if rate_law.find(extra_state) == -1:
                 raise ValueError(f'{extra_state} is not in the rate law')
+
+        return True
+
+    def validate_rate_laws(self, rate_law, reverse_rate_law) -> bool:
+        '''
+        this function validates the rate_law against the archtype
+            It expects the rate_law to contain the parameters
+            It expects the rate_law to contain the extra states
+            ^ copilot generated
+        '''
+
+        for parameter in self.parameters:
+            if rate_law.find(parameter) == -1 and reverse_rate_law.find(parameter) == -1:
+                raise ValueError(f'{parameter} is not in the rate law or reverse rate law')
+
+        for extra_state in self.extra_states:
+            if rate_law.find(extra_state) == -1 and reverse_rate_law.find(extra_state) == -1:
+                raise ValueError(f'{extra_state} is not in the rate law or reverse rate law')
 
         return True
 

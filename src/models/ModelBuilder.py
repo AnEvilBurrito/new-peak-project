@@ -21,8 +21,9 @@ class ModelBuilder:
         self.states = {}
         self.parameters = {}
 
-        self.r_model = None 
-        self.r_solved = None 
+        self.custom_strings = {}
+
+        self.roadrunner_model: roadrunner.RoadRunner = None # type: roadrunner.RoadRunner
 
     def get_parameters(self):
         '''
@@ -97,6 +98,15 @@ class ModelBuilder:
         '''
         position can only be in str: top, reaction, state, parameters, end 
         '''
+        all_positions = ['top', 'reaction', 'state', 'parameters', 'end']
+        for p in all_positions:
+            if p == position:
+                if p in self.custom_strings:
+                    self.custom_strings[p] += ant_string + '\n'
+                else: 
+                    self.custom_strings[p] = ant_string + '\n'
+                break
+
 
     def add_simple_piecewise(self, before_value: float, activation_time: float, after_value: float, state_name: str):
         '''
@@ -112,16 +122,32 @@ class ModelBuilder:
 
         antimony_string += f'model {self.name}\n\n'
 
+        # add top custom str 
+        if 'top' in self.custom_strings:
+            antimony_string += self.custom_strings['top']
+
         # add reactions
+        
+        # first, add reaction custom str 
+        if 'reaction' in self.custom_strings:
+            antimony_string += self.custom_strings['reaction']
+
         i = 0
         while i < len(self.reactions):
             r = self.reactions[i]
+            if r.reversible: 
+                pass # TODO: implement reversible reactions
             r_index = f'J{i}'
             antimony_string += r.get_antimony_reaction_str(r_index)
             antimony_string += '\n'
             i += 1
 
         # add state vars
+
+        # first, add state custom str
+        if 'state' in self.custom_strings:
+            antimony_string += self.custom_strings['state']
+
         antimony_string += '\n'
         antimony_string += '# State variables in the system\n'
         all_states = self.get_state_variables()
@@ -130,10 +156,20 @@ class ModelBuilder:
         antimony_string += '\n'
 
         # add parameters
+
+        # first, add parameter custom str
+        if 'parameters' in self.custom_strings:
+            antimony_string += self.custom_strings['parameters']
+
         antimony_string += '# Parameters in the system\n'
         all_params = self.get_parameters()
         for key, val in all_params.items():
             antimony_string += f'{key}={val}\n'
+
+
+        # add end custom str
+        if 'end' in self.custom_strings:
+            antimony_string += self.custom_strings['end']
 
         antimony_string += '\nend'
 
@@ -155,6 +191,20 @@ class ModelBuilder:
             return sbml_model
 
         raise Exception('Error in loading antimony model')
+
+
+    def compile_to_roadrunner(self, sbml_model_str: str):
+
+        roadrunner_model = roadrunner.RoadRunner(sbml_model_str)
+        self.roadrunner_model = roadrunner_model
+        print('Roadrunner model compiled, run self.roadrunner_model.simulate() to simulate')
+
+
+    def get_roadrunner_model(self, sbml_str: str):
+
+        roadrunner_model = roadrunner.RoadRunner(sbml_str)
+        print('Roadrunner model compiled and returned')
+        return roadrunner_model
 
     
     # These two functions are testing helpers only, not to use in practice

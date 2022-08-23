@@ -16,13 +16,6 @@ mass_action_21 = ReactionArchtype(
     'ka*&A*&B - kd*&C',
     assume_parameters_values={'ka': 0.001, 'kd': 0.01},
     assume_reactant_values={'&A': 100, '&B': 100},
-    assume_product_values={'&C': 0})
-
-mass_action_12 = ReactionArchtype(
-    'Mass Action',
-    ('&C',), ('&A', '&B'),
-    ('ka', 'kd'),
-    'ka*&A*&B - kd*&C',
-    assume_parameters_values={'ka': 0.001, 'kd': 0.01},
-    assume_reactant_values={'&C': 0},
-    assume_product_values={'&A': 100, '&B': 100})
+    assume_product_values={'&C': 0},
+    reversible=True,
+    reverse_rate_law='kd*&C- ka*&A*&B')

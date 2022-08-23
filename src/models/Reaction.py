@@ -252,7 +252,7 @@ class Reaction:
             rate_law_str = rate_law_str.replace(archtype_name, str(replacement_name))
             i += 1
 
-        return f'{r_index}: {product_str} -> {reactant_str}; {rate_law_str}'
+        return f'{r_index}r: {product_str} -> {reactant_str}; {rate_law_str}'
 
 
 

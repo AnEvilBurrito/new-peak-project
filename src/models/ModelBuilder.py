@@ -135,11 +135,12 @@ class ModelBuilder:
         i = 0
         while i < len(self.reactions):
             r = self.reactions[i]
-            if r.reversible: 
-                pass # TODO: implement reversible reactions
             r_index = f'J{i}'
             antimony_string += r.get_antimony_reaction_str(r_index)
             antimony_string += '\n'
+            if r.reversible: 
+                antimony_string += r.get_antimony_reactions_reverse_str(r_index)
+                antimony_string += '\n'
             i += 1
 
         # add state vars

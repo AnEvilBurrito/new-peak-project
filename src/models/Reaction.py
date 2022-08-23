@@ -67,7 +67,6 @@ class Reaction:
 
         # reversibility unchangable in Reaction, but only in Archtype
         self.reversible = self.archtype.reversible
-        self.unique_reverse_parameters = self.archtype.unique_reverse_parameters
 
     def _unify_value_types_to_dict(self, values: Union[dict, tuple, int, float], names: Tuple[str]) -> Dict[str, float]:
         '''
@@ -227,14 +226,14 @@ class Reaction:
         # rate law substitution needs to occur for reactants, products, extra states and parameters
         i = 0 
         while i < len(self.reactants_names):
-            archtype_name = self.archtype.products[i]
+            archtype_name = self.archtype.reactants[i]
             replacement_name = self.reactants_names[i]
             rate_law_str = rate_law_str.replace(archtype_name, replacement_name)
             i += 1 
             
         i = 0
         while i < len(self.products_names):
-            archtype_name = self.archtype.reactants[i]
+            archtype_name = self.archtype.products[i]
             replacement_name = self.products_names[i]
             rate_law_str = rate_law_str.replace(archtype_name, replacement_name)
             i += 1

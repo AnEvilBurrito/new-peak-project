@@ -220,8 +220,8 @@ class Reaction:
             r_index: str, represents reaction name in the system, usually an simple index 
         
         '''
-        reactant_str = ' + '.join(self.products_names)
-        product_str = ' + '.join(self.reactants_names)
+        reactant_str = ' + '.join(self.reactants_names)
+        product_str = ' + '.join(self.products_names)
         rate_law_str = self.archtype.reverse_rate_law 
         # rate law substitution needs to occur for reactants, products, extra states and parameters
         i = 0 

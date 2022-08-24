@@ -146,11 +146,11 @@ class ModelBuilder:
         # add state vars
 
         # first, add state custom str
+        antimony_string += '\n'
+        antimony_string += '# State variables in the system\n'
         if 'state' in self.custom_strings:
             antimony_string += self.custom_strings['state']
 
-        antimony_string += '\n'
-        antimony_string += '# State variables in the system\n'
         all_states = self.get_state_variables()
         for key, val in all_states.items():
             antimony_string += f'{key}={val}\n'
@@ -159,10 +159,10 @@ class ModelBuilder:
         # add parameters
 
         # first, add parameter custom str
+        antimony_string += '# Parameters in the system\n'
         if 'parameters' in self.custom_strings:
             antimony_string += self.custom_strings['parameters']
 
-        antimony_string += '# Parameters in the system\n'
         all_params = self.get_parameters()
         for key, val in all_params.items():
             antimony_string += f'{key}={val}\n'

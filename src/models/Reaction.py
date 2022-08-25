@@ -1,5 +1,6 @@
 from typing import Dict, Union, Tuple
 from .ReactionArchtype import ReactionArchtype
+from .LinkedParameters import LinkedParameters
 
 class Reaction: 
     '''
@@ -25,7 +26,8 @@ class Reaction:
         extra_states: Tuple[str] = (),
         parameters_values: Union[dict, tuple, int, float] = (),
         reactant_values: Union[dict, tuple, int, float] = (),
-        product_values: Union[dict, tuple, int, float] = ()):
+        product_values: Union[dict, tuple, int, float] = (),
+        linked_parameters: Tuple[LinkedParameters] = ()):
 
         self.archtype = reaction_archtype
         # reactants, products and extra states must be provided in the length of the archtype
@@ -68,6 +70,15 @@ class Reaction:
         # reversibility unchangable in Reaction, but only in Archtype
         self.reversible = self.archtype.reversible
 
+        # linked parameters
+
+        self.linked_parameters = linked_parameters
+        if self.exists_linked_parameters:
+            assert len(self.linked_parameters) == self.archtype.parameters_count, f'length of linked_parameters must be equal to the number of parameters in the reaction archtype, {len(linked_parameters)} != {self.archtype.parameters_count}'
+
+    def exists_linked_parameters(self) -> bool:
+        return len(self.linked_parameters) > 0
+
     def _unify_value_types_to_dict(self, values: Union[dict, tuple, int, float], names: Tuple[str]) -> Dict[str, float]:
         '''
         unifies the value types to dict if not already in dict format
@@ -108,20 +119,20 @@ class Reaction:
         returns a dictionary of the parameters in the reaction
         '''
 
-        parameter_names = []
-
-        i = 0
-        while i < len(self.archtype.parameters):
-            archtype_name = self.archtype.parameters[i]
-            replacement_name = r_index + '_' + archtype_name
-            parameter_names.append(replacement_name)
-            i += 1
 
         parameters = {}
+        # linked parameters bypass the archtype parameters and are directly assigned
+        # they will void r_index assignment completely
+        if self.exists_linked_parameters:
+            for i in range(len(self.linked_parameters)):
+                parameters[str(self.linked_parameters[i])] = self.linked_parameters[i].get_value()
+            return parameters
+
+
         if len(self.archtype.assume_parameters_values) > 0: 
             # if the reaction archtype has parameters_values specified, use those
             # to create a dictionary 
-            parameters = {f'{r_index}_{key}': 0 for key in self.archtype.parameters}
+            parameters = {f'{r_index}_{p}': 0 for p in self.archtype.parameters}
             for key, val in self.archtype.assume_parameters_values.items():
                 parameters[f'{r_index}_{key}'] = val
             
@@ -208,7 +219,10 @@ class Reaction:
         i = 0
         while i < len(self.archtype.parameters):
             archtype_name = self.archtype.parameters[i]
-            replacement_name = r_index + '_' + archtype_name
+            if self.exists_linked_parameters:
+                replacement_name = str(self.linked_parameters[i])
+            else: 
+                replacement_name = r_index + '_' + archtype_name
             rate_law_str = rate_law_str.replace(archtype_name, str(replacement_name))
             i += 1
 
@@ -238,6 +252,7 @@ class Reaction:
             rate_law_str = rate_law_str.replace(archtype_name, replacement_name)
             i += 1
 
+
         i = 0
         while i < len(self.archtype.extra_states):
             archtype_name = self.archtype.extra_states[i]
@@ -248,7 +263,10 @@ class Reaction:
         i = 0
         while i < len(self.archtype.parameters):
             archtype_name = self.archtype.parameters[i]
-            replacement_name = r_index + '_' + archtype_name
+            if self.exists_linked_parameters:
+                replacement_name = str(self.linked_parameters[i])
+            else:
+                replacement_name = r_index + '_' + archtype_name
             rate_law_str = rate_law_str.replace(archtype_name, str(replacement_name))
             i += 1
 

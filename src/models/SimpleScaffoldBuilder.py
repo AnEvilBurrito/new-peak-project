@@ -3,6 +3,7 @@
 from typing import Dict
 from .ModelBuilder import ModelBuilder
 from .Reaction import Reaction
+from .LinkedParameters import LinkedParameters as LP
 from .ArchtypeCollections import *
 
 class SimpleScaffoldBuilder(ModelBuilder):
@@ -19,6 +20,31 @@ class SimpleScaffoldBuilder(ModelBuilder):
         super().__init__(name)
         self.scaffold_connections: Dict[str, list] = {}
 
+
+    def add_reaction(self, reaction: Reaction):
+
+        all_scaffolds = self.get_all_scaffolds()
+        # check if the reactants and products are potentially scaffold proteins 
+        # if so, we need to map the reaction to each scaffold sub-specie 
+
+        # first, check if the reactants are scaffold proteins
+        for reactant in reaction.reactants_names:
+            if reactant in all_scaffolds:
+                # then, find direct interactors of the scaffold protein 
+                interactors = self._directly_connected_species(reactant)
+                # create a new reaction for each interactor using linked
+                # parameters
+                A = reactant
+                for M in interactors:
+                    new_reaction = Reaction(reaction.archtype, (f'{A}_{M}',), reaction.products_names, linked_parameters=reaction.linked_parameters)
+                    super().add_reaction(new_reaction)
+                
+        # TODO: finish implementing this function
+
+        return super().add_reaction(reaction)
+
+    def get_all_scaffolds(self):
+        return list(self.scaffold_connections.keys())
 
     def rule_add_scaffold_reactions(self, scaffold: str, interactors: list):
         

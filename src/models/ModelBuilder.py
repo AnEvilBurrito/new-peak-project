@@ -20,6 +20,7 @@ class ModelBuilder:
 
         self.states = {}
         self.parameters = {}
+        self.variables = {}
 
         self.custom_strings = {}
 
@@ -60,11 +61,23 @@ class ModelBuilder:
         default value will only follow the first repeated state variable
         '''
 
-        states_list = {}
+        states = {}
         for r in self.reactions:
-            states_list.update(r.get_reaction_states())
+            states.update(r.get_reaction_states())
 
-        return states_list
+        return states
+
+    def get_other_variables(self):
+        '''
+        Doc
+        '''
+        return self.variables
+
+    def get_all_variables_keys(self):
+        '''
+        Doc
+        '''
+        return list(self.get_state_variables().keys()) + list(self.variables.keys())
 
     def add_reaction(self, reaction: Reaction):
         '''
@@ -75,23 +88,6 @@ class ModelBuilder:
         # TODO: find a better way to do this
         self.states.update(self.get_state_variables())
         self.parameters.update(self.get_parameters())
-
-    def add_reaction_test(self, reaction_archtype: ReactionArchtype,
-                     reactants: Tuple[str],
-                     products: Tuple[str],
-                     extra_states: Tuple[str] = (),
-                     parameters_values: Union[dict, tuple, int, float] = (),
-                     reactant_values: Union[dict, tuple, int, float] = (),
-                     product_values: Union[dict, tuple, int, float] = ()):
-        
-        '''
-        Docstring, consider specialised parameter assignment syntax 
-        symbol @{idx}_{param_name}: inject parameter name from reaction idx's parameter param_name 
-        symbol %-{idx}_{param_name}: given parameter i, inject parameter name from reaction i-idx parameter param_name (relative)
-        symbol ${param_name}: inject parameter name from global parameter param_name, global parameters have fixed names 
-        '''
-        reaction = Reaction(reaction_archtype, reactants, products, extra_states, parameters_values, reactant_values, product_values)
-        pass 
 
     def inject_antimony_string_at(self, ant_string: str, position: str = 'reaction'):
 
@@ -112,7 +108,8 @@ class ModelBuilder:
         '''
         Adds a simple piecewise function to the state variable state_name
         '''
-        pass 
+        self.variables[state_name] = f'{state_name} := piecewise({before_value}, time < {activation_time}, {after_value})'
+        # self.inject_antimony_string_at(f"{state_name} := piecewise({after_value}, time > {activation_time}, {before_value})", 'parameters')
 
     def get_antimony_model(self):
         '''
@@ -167,6 +164,12 @@ class ModelBuilder:
         for key, val in all_params.items():
             antimony_string += f'{key}={val}\n'
 
+        # add other variables
+        antimony_string += '\n'
+        antimony_string += '# Other variables in the system\n'
+        for key, val in self.variables.items():
+            antimony_string += f'{val}\n'
+        antimony_string += '\n' 
 
         # add end custom str
         if 'end' in self.custom_strings:

@@ -9,6 +9,14 @@ michaelis_menten = ReactionArchtype(
     assume_reactant_values={'&S': 100},
     assume_product_values={'&E': 0})
 
+michaelis_menten_fixed = ReactionArchtype(
+    'Michaelis Menten',
+    ('&S',), ('&E',),
+    (),
+    '100*&S/(1 + &S)',
+    assume_reactant_values={'&S': 100},
+    assume_product_values={'&E': 0})
+
 mass_action_21 = ReactionArchtype(
     'Mass Action',
     ('&A', '&B'), ('&C',),

@@ -20,29 +20,6 @@ class SimpleScaffoldBuilder(ModelBuilder):
         super().__init__(name)
         self.scaffold_connections: Dict[str, list] = {}
 
-
-    def add_reaction(self, reaction: Reaction):
-
-        all_scaffolds = self.get_all_scaffolds()
-        # check if the reactants and products are potentially scaffold proteins 
-        # if so, we need to map the reaction to each scaffold sub-specie 
-
-        # first, check if the reactants are scaffold proteins
-        for reactant in reaction.reactants_names:
-            if reactant in all_scaffolds:
-                # then, find direct interactors of the scaffold protein 
-                interactors = self._directly_connected_species(reactant)
-                # create a new reaction for each interactor using linked
-                # parameters
-                A = reactant
-                for M in interactors:
-                    new_reaction = Reaction(reaction.archtype, (f'{A}_{M}',), reaction.products_names, linked_parameters=reaction.linked_parameters)
-                    super().add_reaction(new_reaction)
-                
-        # TODO: finish implementing this function
-
-        return super().add_reaction(reaction)
-
     def get_all_scaffolds(self):
         return list(self.scaffold_connections.keys())
 
@@ -114,16 +91,26 @@ class SimpleScaffoldBuilder(ModelBuilder):
         completed_pairs = []
     
         for s in self.scaffold_connections:
-            self.variables[s] = f'{s} = 0'
             direct_interactors = self._directly_connected_species(s)
             indirect_interactors = self._indirectly_connected_species(s)
+            n_di = len(direct_interactors)
+            for di in direct_interactors: 
+                A = f'{s}_{di}'
+                self.add_reaction(Reaction(michaelis_menten_fixed, (s,), (A,), reactant_values=n_di*100))
+
             for di in direct_interactors:
-                A, B = f'{s}_{di}', f'{di}_{s}'
+                # create michalean mapping between s and subspecies of s with 
+                # fixed parameters for each subspecies 
+                A = f'{s}_{di}'
+
+                # create mass action binding reaction between s and di
+
+                B = f'{di}_{s}'
                 P = f'bound_{A}'
                 if A not in completed_pairs and B not in completed_pairs:
                     self.add_reaction(Reaction(mass_action_21, (A, B), (P,)))
-                    self.variables[f'TFB_{A}'] = f'TFB_{A} = {P}/100'
-                    self.variables[f'TFB_{B}'] = f'TFB_{B} = {P}/100'
+                    self.variables[f'TFB_{A}'] = f'TFB_{A} := {P}/100'
+                    self.variables[f'TFB_{B}'] = f'TFB_{B} := {P}/100'
                     completed_pairs.append(A)
                     completed_pairs.append(B)
 
@@ -132,7 +119,7 @@ class SimpleScaffoldBuilder(ModelBuilder):
                 TFB_A_B = f'TFB_{s}_{ii}'
                 TFB_B_A = f'TFB_{ii}_{s}'
 
-                TFB_A_B_expr = f'{TFB_A_B} = '
+                TFB_A_B_expr = f'{TFB_A_B} := '
                 # We must filter out nodes that are not connected to s, then build sum of 
                 # frac bound of ii to s 
                 direct_interactors_of_ii = self._directly_connected_species(ii)
@@ -144,7 +131,7 @@ class SimpleScaffoldBuilder(ModelBuilder):
 
                 self.variables[TFB_A_B] = TFB_A_B_expr
 
-                TFB_B_A_expr = f'{TFB_B_A} = '
+                TFB_B_A_expr = f'{TFB_B_A} := '
                 # We must filter out nodes that are not connected to ii, then build sum of
                 # frac bound of s to ii
                 direct_interactors_of_s = self._directly_connected_species(s)
@@ -163,70 +150,7 @@ class SimpleScaffoldBuilder(ModelBuilder):
         '''
         run build before creating antimony model 
         '''
-        self.rule_build_scaffold_connections()
-        antimony_string = ''
-
-        antimony_string += f'model {self.name}\n\n'
-
-        # add top custom str 
-        if 'top' in self.custom_strings:
-            antimony_string += self.custom_strings['top']
-
-        # add reactions
-        
-        # first, add reaction custom str 
-        if 'reaction' in self.custom_strings:
-            antimony_string += self.custom_strings['reaction']
-
-        i = 0
-        while i < len(self.reactions):
-            r = self.reactions[i]
-            r_index = f'J{i}'
-            antimony_string += r.get_antimony_reaction_str(r_index)
-            antimony_string += '\n'
-            if r.reversible: 
-                antimony_string += r.get_antimony_reactions_reverse_str(r_index)
-                antimony_string += '\n'
-            i += 1
-
-        # add state vars
-
-        # first, add state custom str
-        antimony_string += '\n'
-        antimony_string += '# State variables in the system\n'
-        if 'state' in self.custom_strings:
-            antimony_string += self.custom_strings['state']
-
-        all_states = self.get_state_variables()
-        for key, val in all_states.items():
-            antimony_string += f'{key}={val}\n'
-        antimony_string += '\n'
-
-        # add parameters
-
-        # first, add parameter custom str
-        antimony_string += '# Parameters in the system\n'
-        if 'parameters' in self.custom_strings:
-            antimony_string += self.custom_strings['parameters']
-
-        all_params = self.get_parameters()
-        for key, val in all_params.items():
-            antimony_string += f'{key}={val}\n'
-
-        # add other variables
-        antimony_string += '\n'
-        antimony_string += '# Other variables in the system\n'
-        for key, val in self.variables.items():
-            antimony_string += f'{val}\n'
-        antimony_string += '\n' 
-
-        # add end custom str
-        if 'end' in self.custom_strings:
-            antimony_string += self.custom_strings['end']
-
-        antimony_string += '\nend'
-
-        return antimony_string
+        return super().get_antimony_model()
 
 
 

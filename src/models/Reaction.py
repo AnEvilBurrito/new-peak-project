@@ -73,7 +73,7 @@ class Reaction:
         # linked parameters
 
         self.linked_parameters = linked_parameters
-        if self.exists_linked_parameters:
+        if self.exists_linked_parameters():
             assert len(self.linked_parameters) == self.archtype.parameters_count, f'length of linked_parameters must be equal to the number of parameters in the reaction archtype, {len(linked_parameters)} != {self.archtype.parameters_count}'
 
     def exists_linked_parameters(self) -> bool:
@@ -123,7 +123,7 @@ class Reaction:
         parameters = {}
         # linked parameters bypass the archtype parameters and are directly assigned
         # they will void r_index assignment completely
-        if self.exists_linked_parameters:
+        if self.exists_linked_parameters():
             for i in range(len(self.linked_parameters)):
                 parameters[str(self.linked_parameters[i])] = self.linked_parameters[i].get_value()
             return parameters
@@ -219,7 +219,7 @@ class Reaction:
         i = 0
         while i < len(self.archtype.parameters):
             archtype_name = self.archtype.parameters[i]
-            if self.exists_linked_parameters:
+            if self.exists_linked_parameters():
                 replacement_name = str(self.linked_parameters[i])
             else: 
                 replacement_name = r_index + '_' + archtype_name
@@ -263,7 +263,7 @@ class Reaction:
         i = 0
         while i < len(self.archtype.parameters):
             archtype_name = self.archtype.parameters[i]
-            if self.exists_linked_parameters:
+            if self.exists_linked_parameters():
                 replacement_name = str(self.linked_parameters[i])
             else:
                 replacement_name = r_index + '_' + archtype_name

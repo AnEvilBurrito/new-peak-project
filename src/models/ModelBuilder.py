@@ -79,6 +79,12 @@ class ModelBuilder:
         '''
         return list(self.get_state_variables().keys()) + list(self.variables.keys())
 
+    def get_custom_variable_keys(self):
+        '''
+        Doc
+        '''
+        return list(self.variables.keys())
+
     def add_reaction(self, reaction: Reaction):
         '''
         Doc
@@ -102,6 +108,12 @@ class ModelBuilder:
                 else: 
                     self.custom_strings[p] = ant_string + '\n'
                 break
+
+    def add_custom_variables(self, variable_name, reaction_rule):
+        '''
+        Doc
+        '''
+        self.variables[variable_name] = reaction_rule
 
 
     def add_simple_piecewise(self, before_value: float, activation_time: float, after_value: float, state_name: str):
@@ -197,14 +209,14 @@ class ModelBuilder:
         raise Exception('Error in loading antimony model')
 
 
-    def compile_to_roadrunner(self, sbml_model_str: str):
+    def compile_to_roadrunner(self, sbml_model_str: str) -> roadrunner.RoadRunner:
 
         roadrunner_model = roadrunner.RoadRunner(sbml_model_str)
         self.roadrunner_model = roadrunner_model
         print('Roadrunner model compiled, run self.roadrunner_model.simulate() to simulate')
 
 
-    def get_roadrunner_model(self, sbml_str: str):
+    def get_roadrunner_model(self, sbml_str: str) -> roadrunner.RoadRunner:
 
         roadrunner_model = roadrunner.RoadRunner(sbml_str)
         print('Roadrunner model compiled and returned')

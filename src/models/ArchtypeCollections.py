@@ -57,3 +57,93 @@ michaelis_menten_inh_competitive_1 = ReactionArchtype(
     assume_parameters_values={'Km': 100, 'Vmax': 10, 'Ki': 0.01},
     assume_reactant_values={'&S': 100},
     assume_product_values={'&E': 0})
+
+
+def create_archtype_michaelis_menten(stimulators=0, allosteric_inhibitors=0, competitive_inhibitors=0):
+
+    if stimulators + allosteric_inhibitors + competitive_inhibitors == 0:
+        return michaelis_menten
+
+    # create the archtype
+
+    archtype_name = 'Michaelis Menten General'
+
+    reactants = ('&S',)
+    products = ('&E',)
+    upper_equation = 'Vmax*&S'
+    lower_equation = '(Km + &S)'
+    total_extra_states = ()
+    parameters = ('Km', 'Vmax')
+    assume_parameters_values={'Km': 100, 'Vmax': 10}
+
+    if stimulators > 0:
+        # add the stimulators to the equation
+        stim_str = '*('
+        for i in range(stimulators):
+            stim_str += f'&A{i}*Ka{i}+'
+        
+        upper_equation += stim_str[:-1] + ')'
+
+        # fill extra states
+        extra_states = tuple([f'&A{i}' for i in range(stimulators)])
+        total_extra_states += extra_states
+
+        # fill parameters
+        parameters += tuple([f'Ka{i}' for i in range(stimulators)])
+
+        # fill assume parameters values
+        assume_parameters_values.update({f'Ka{i}': 0.01 for i in range(stimulators)})
+
+    if allosteric_inhibitors > 0:
+        # add the allosteric inhibitors to the equation
+        inhb_allo_str = '*(1+'
+        for i in range(allosteric_inhibitors):
+            inhb_allo_str += f'&L{i}*Kil{i}+'
+        
+        inhb_allo_str = inhb_allo_str[:-1] + ')'
+
+        lower_equation += inhb_allo_str
+
+        # fill extra states
+        extra_states = tuple([f'&L{i}' for i in range(allosteric_inhibitors)])
+        total_extra_states += extra_states
+
+        # fill parameters
+        parameters += tuple([f'Kil{i}' for i in range(allosteric_inhibitors)])
+
+        # fill assume parameters values
+        assume_parameters_values.update({f'Kil{i}': 0.01 for i in range(allosteric_inhibitors)})
+    
+    if competitive_inhibitors > 0:
+        # add the competitive inhibitors to the equation
+        inhb_comp_str = '(Km*1+'
+        for i in range(competitive_inhibitors):
+            inhb_comp_str += f'&I{i}*Kic{i}+'
+        
+        inhb_comp_str = inhb_comp_str[:-1] + ')'
+
+        lower_equation = inhb_comp_str + lower_equation[4:]
+
+        # fill extra states
+        extra_states = tuple([f'&I{i}' for i in range(competitive_inhibitors)])
+        total_extra_states += extra_states
+
+        # fill parameters
+        parameters += tuple([f'Kic{i}' for i in range(competitive_inhibitors)])
+
+        # fill assume parameters values
+        assume_parameters_values.update({f'Kic{i}': 0.01 for i in range(competitive_inhibitors)})
+
+    full_equation = f'{upper_equation}/{lower_equation}'
+
+    general_reaction = ReactionArchtype(
+        archtype_name,
+        reactants, products,
+        parameters,
+        full_equation,
+        extra_states=total_extra_states,
+        assume_parameters_values=assume_parameters_values,
+        assume_reactant_values={'&S': 100},
+        assume_product_values={'&E': 0})
+
+    return general_reaction

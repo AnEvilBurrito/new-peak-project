@@ -23,11 +23,13 @@ class Reaction:
         reaction_archtype: ReactionArchtype, 
         reactants: Tuple[str], 
         products: Tuple[str], 
+        reaction_name: str = '',
         extra_states: Tuple[str] = (),
         parameters_values: Union[dict, tuple, int, float] = (),
         reactant_values: Union[dict, tuple, int, float] = (),
         product_values: Union[dict, tuple, int, float] = (),
-        linked_parameters: Tuple[LinkedParameters] = ()):
+        linked_parameters: Tuple[LinkedParameters] = (),
+        use_parameter_from_reaction: str = ''):
 
         self.archtype = reaction_archtype
         # reactants, products and extra states must be provided in the length of the archtype
@@ -44,6 +46,9 @@ class Reaction:
 
         if isinstance(product_values, dict):
             assert self._dict_vals_exist_in_tuple(product_values, products), 'product_values supplied in dict format must match the product names in the reaction'
+
+        self.name = reaction_name
+        self.parameter_r_index = use_parameter_from_reaction
 
         # must specify reactant, product and extra state names if given in rate law
         self.reactants_names = reactants    
@@ -128,6 +133,13 @@ class Reaction:
                 parameters[str(self.linked_parameters[i])] = self.linked_parameters[i].get_value()
             return parameters
 
+        if self.name != '':
+            r_index = self.name
+        
+        # if parameter_r_index is not None, then the parameter values are assigned to the reaction
+        # priority is above self.name assignment
+        if self.parameter_r_index != '':
+            r_index = self.parameter_r_index
 
         if len(self.archtype.assume_parameters_values) > 0: 
             # if the reaction archtype has parameters_values specified, use those
@@ -191,6 +203,9 @@ class Reaction:
             r_index: str, represents reaction name in the system, usually an simple index 
         
         '''
+        if self.name != '':
+            r_index = self.name
+
         reactant_str = ' + '.join(self.reactants_names)
         product_str = ' + '.join(self.products_names)
         rate_law_str = self.archtype.rate_law 
@@ -216,13 +231,17 @@ class Reaction:
             rate_law_str = rate_law_str.replace(archtype_name, replacement_name)
             i += 1
 
+        r_index_p = r_index 
+        if self.parameter_r_index != '':
+            r_index_p = self.parameter_r_index
+
         i = 0
         while i < len(self.archtype.parameters):
             archtype_name = self.archtype.parameters[i]
             if self.exists_linked_parameters():
                 replacement_name = str(self.linked_parameters[i])
             else: 
-                replacement_name = r_index + '_' + archtype_name
+                replacement_name = r_index_p + '_' + archtype_name
             rate_law_str = rate_law_str.replace(archtype_name, str(replacement_name))
             i += 1
 
@@ -234,6 +253,9 @@ class Reaction:
             r_index: str, represents reaction name in the system, usually an simple index 
         
         '''
+        if self.name != '':
+            r_index = self.name
+
         reactant_str = ' + '.join(self.reactants_names)
         product_str = ' + '.join(self.products_names)
         rate_law_str = self.archtype.reverse_rate_law 
@@ -260,13 +282,17 @@ class Reaction:
             rate_law_str = rate_law_str.replace(archtype_name, replacement_name)
             i += 1
 
+        r_index_p = r_index 
+        if self.parameter_r_index != '':
+            r_index_p = self.parameter_r_index
+
         i = 0
         while i < len(self.archtype.parameters):
             archtype_name = self.archtype.parameters[i]
             if self.exists_linked_parameters():
                 replacement_name = str(self.linked_parameters[i])
             else:
-                replacement_name = r_index + '_' + archtype_name
+                replacement_name = r_index_p + '_' + archtype_name
             rate_law_str = rate_law_str.replace(archtype_name, str(replacement_name))
             i += 1
 
@@ -279,4 +305,4 @@ class Reaction:
         if self.archtype.reversible:
             return self.get_antimony_reaction_str(r_index='for') + '\n' + self.get_antimony_reactions_reverse_str(r_index='rev')
 
-        return self.get_antimony_reaction_str(r_index='react')
+        return self.get_antimony_reaction_str(r_index='react' if self.name == '' else self.name)

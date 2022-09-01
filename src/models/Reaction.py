@@ -29,7 +29,8 @@ class Reaction:
         reactant_values: Union[dict, tuple, int, float] = (),
         product_values: Union[dict, tuple, int, float] = (),
         linked_parameters: Tuple[LinkedParameters] = (),
-        use_parameter_from_reaction: str = ''):
+        use_parameter_from_reaction: str = '',
+        zero_init: bool = False):
 
         self.archtype = reaction_archtype
         # reactants, products and extra states must be provided in the length of the archtype
@@ -37,15 +38,6 @@ class Reaction:
         assert len(reactants) == reaction_archtype.reactants_count, f'length of reactants must be equal to the number of reactants in the reaction archtype, {len(reactants)} != {reaction_archtype.reactants_count}'
         assert len(products) == reaction_archtype.products_count, f'length of products must be equal to the number of products in the reaction archtype, {len(products)} != {reaction_archtype.products_count}'
         assert len(extra_states) == reaction_archtype.extra_states_count, f'length of extra_states must be equal to the number of extra_states in the reaction archtype, {len(extra_states)} != {reaction_archtype.extra_states_count}'
-
-        if isinstance(parameters_values, dict):
-            assert self._exist_in_archtype(parameters_values, self.archtype.parameters), 'parameters_values supplied in dict format must match the parameter names in the archtype'
-        
-        if isinstance(reactant_values, dict):
-            assert self._dict_vals_exist_in_tuple(reactant_values, reactants), 'reactant_values supplied in dict format must match the reactant names in the reaction'
-
-        if isinstance(product_values, dict):
-            assert self._dict_vals_exist_in_tuple(product_values, products), 'product_values supplied in dict format must match the product names in the reaction'
 
         self.name = reaction_name
         self.parameter_r_index = use_parameter_from_reaction
@@ -61,10 +53,23 @@ class Reaction:
         self.product_names_to_archtype_names = self._direct_tuples_to_dict(products, reaction_archtype.products)
         self.extra_states_names_to_archtype_names = self._direct_tuples_to_dict(extra_states, reaction_archtype.extra_states)
 
+        if zero_init: 
+            reactant_values = {i: 0 for i in self.reactants_names}
+            product_values = {i: 0 for i in self.products_names}
+
         # override values if provided
         self.parameters_values = self._unify_value_types_to_dict(parameters_values, self.archtype.parameters)
         self.reactant_values = self._unify_value_types_to_dict(reactant_values, reactants)
         self.product_values = self._unify_value_types_to_dict(product_values, products)
+
+        if isinstance(parameters_values, dict):
+            assert self._exist_in_archtype(parameters_values, self.archtype.parameters), 'parameters_values supplied in dict format must match the parameter names in the archtype'
+        
+        if isinstance(reactant_values, dict):
+            assert self._dict_vals_exist_in_tuple(reactant_values, reactants), 'reactant_values supplied in dict format must match the reactant names in the reaction'
+
+        if isinstance(product_values, dict):
+            assert self._dict_vals_exist_in_tuple(product_values, products), 'product_values supplied in dict format must match the product names in the reaction'
 
         # checking assumed values existence for validation logic on reaction values assignment 
 

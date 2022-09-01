@@ -21,6 +21,7 @@ class ModelBuilder:
         self.states = {}
         self.parameters = {}
         self.variables = {}
+        self.enforce_state_values = {}
 
         self.custom_strings = {}
 
@@ -65,6 +66,10 @@ class ModelBuilder:
         for r in self.reactions:
             states.update(r.get_reaction_states())
 
+        # enforce state values if defined in the class
+        for k, v in self.enforce_state_values.items():
+            states[k] = v
+
         return states
 
     def get_other_variables(self):
@@ -108,6 +113,12 @@ class ModelBuilder:
                 else: 
                     self.custom_strings[p] = ant_string + '\n'
                 break
+
+    def add_enforce_state_value(self, state_name: str, value: float):
+        '''
+        Doc
+        '''
+        self.enforce_state_values[state_name] = value
 
     def add_custom_variables(self, variable_name, reaction_rule):
         '''

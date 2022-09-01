@@ -15,14 +15,14 @@ class ModelBuilder:
 
     def __init__(self, name):
         self.name = name
-        self.reactions: List[Reaction] = []
-        # co-pilot generated, not sure if this is necessary
 
+        self.reactions: List[Reaction] = []
+        # these two fields are coupled to self.reaction
         self.states = {}
         self.parameters = {}
+
         self.variables = {}
         self.enforce_state_values = {}
-
         self.custom_strings = {}
 
         self.roadrunner_model: roadrunner.RoadRunner = None # type: roadrunner.RoadRunner
@@ -78,10 +78,13 @@ class ModelBuilder:
         '''
         return self.variables
 
-    def get_all_variables_keys(self):
+    def get_all_variables_keys(self, with_time=False):
         '''
         Doc
         '''
+        if with_time:
+            return list(self.states.keys()) + list(self.variables.keys()) + ['time']
+
         return list(self.get_state_variables().keys()) + list(self.variables.keys())
 
     def get_custom_variable_keys(self):
@@ -89,11 +92,19 @@ class ModelBuilder:
         Doc
         '''
         return list(self.variables.keys())
+    
 
     def add_reaction(self, reaction: Reaction):
         '''
-        Doc
+        Add a reaction to the model, the reaction must be an instance of the Reaction class
         '''
+
+        # validate that the reaction has a unique name within the model if a name is defined
+        if reaction.name != '':
+            for r in self.reactions:
+                if r.name == reaction.name:
+                    raise Exception(f'Reaction name is not unique within the model {reaction.name}')
+
         self.reactions.append(reaction)
         # NOTE: This is an ugly hack to make sure the reaction is added to the model
         # TODO: find a better way to do this
@@ -133,6 +144,45 @@ class ModelBuilder:
         '''
         self.variables[state_name] = f'{state_name} := piecewise({before_value}, time < {activation_time}, {after_value})'
         # self.inject_antimony_string_at(f"{state_name} := piecewise({after_value}, time > {activation_time}, {before_value})", 'parameters')
+
+    def delete_reaction(self, reaction_name: str):
+        '''
+        Deletes a reaction from the model
+        '''
+        for r in self.reactions:
+            if r.name == reaction_name:
+                self.reactions.remove(r)
+                break
+
+    def copy(self, overwrite_name='') -> 'ModelBuilder':
+        '''
+        Copy the model
+        '''
+
+        name = self.name if overwrite_name == '' else overwrite_name
+
+        new_model = ModelBuilder(name)
+        for r in self.reactions:
+            new_model.add_reaction(r.copy())
+        new_model.variables = self.variables
+        new_model.enforce_state_values = self.enforce_state_values
+        new_model.custom_strings = self.custom_strings
+
+        return new_model
+
+    def combine(self, model: 'ModelBuilder', reactions_only=False) -> 'ModelBuilder':
+        '''
+        Combine two models
+        '''
+        new_model = self.copy()
+        for r in model.reactions:
+            new_model.add_reaction(r.copy())
+        
+        if not reactions_only:
+            new_model.variables.update(model.variables)
+            new_model.enforce_state_values.update(model.enforce_state_values)
+            new_model.custom_strings.update(model.custom_strings)
+        return new_model
 
     def get_antimony_model(self):
         '''

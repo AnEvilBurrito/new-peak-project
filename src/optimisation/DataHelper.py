@@ -66,7 +66,7 @@ class DataHelper:
             model_data = []
             for t in exp_time:
                 idx = np.argmin(np.abs(result['time'] - t))
-                model_value = result[f'[{name}]'][idx]
+                model_value = result[f'{name}'][idx]
                 model_data.append(model_value)
 
             self.sim_data[name] = model_data

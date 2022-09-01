@@ -1,4 +1,5 @@
 from typing import Dict, Union, Tuple
+from copy import copy
 from .ReactionArchtype import ReactionArchtype
 from .LinkedParameters import LinkedParameters
 
@@ -303,6 +304,11 @@ class Reaction:
 
         return f'{r_index}r: {product_str} -> {reactant_str}; {rate_law_str}'
 
+    def copy(self) -> 'Reaction':
+        '''
+        returns a copy of the reaction
+        '''
+        return copy(self)
 
 
     def __str__(self) -> str:

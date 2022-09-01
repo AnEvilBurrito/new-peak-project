@@ -3,6 +3,8 @@
 from typing import List, Union, Tuple
 import antimony
 import roadrunner
+import pickle
+import warnings
 
 from .Reaction import Reaction
 from .ReactionArchtype import ReactionArchtype
@@ -116,6 +118,7 @@ class ModelBuilder:
         '''
         position can only be in str: top, reaction, state, parameters, end 
         '''
+        warnings.warn('Adding variables using this function will result in a variable mismatch with antimony variables, since the variables will not be registered within the class itself', SyntaxWarning)
         all_positions = ['top', 'reaction', 'state', 'parameters', 'end']
         for p in all_positions:
             if p == position:
@@ -183,6 +186,24 @@ class ModelBuilder:
             new_model.enforce_state_values.update(model.enforce_state_values)
             new_model.custom_strings.update(model.custom_strings)
         return new_model
+
+    def __str__(self) -> str:
+        
+        return self.head()
+
+    def head(self):
+        '''
+        Returns the general characteristics of the model
+        '''
+        return_str = ''
+        return_str += f'Model Name {self.name}\n'
+        return_str += f'Number of Reactions {len(self.reactions)}\n'
+        return_str += f'Number of State Variables {len(self.states)}\n'
+        return_str += f'Number of Parameters {len(self.parameters)}\n'
+        return_str += f'Number of Custom Variables {len(self.variables)}\n'
+        return_str += f'Number of Enforced State Values {len(self.enforce_state_values)}\n'
+        return_str += f'Number of Custom Strings {len(self.custom_strings)}\n'
+        return return_str
 
     def get_antimony_model(self):
         '''
@@ -269,6 +290,28 @@ class ModelBuilder:
 
         raise Exception('Error in loading antimony model')
 
+    def save_antimony_model_as(self, file_name: str):
+        '''
+        Doc
+        '''
+        ant_model = self.get_antimony_model()
+        with open(file_name, 'w') as f:
+            f.write(ant_model)
+
+    def save_sbml_model_as(self, file_name: str):
+        '''
+        Doc
+        '''
+        sbml_model = self.get_sbml_model()
+        with open(file_name, 'w') as f:
+            f.write(sbml_model)
+
+    def save_model_as_pickle(self, file_name: str):
+        '''
+        Doc
+        '''
+        with open(file_name, 'wb') as f:
+            pickle.dump(self, f)
 
     def compile_to_roadrunner(self, sbml_model_str: str) -> roadrunner.RoadRunner:
 

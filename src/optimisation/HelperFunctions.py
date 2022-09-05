@@ -33,8 +33,8 @@ def generate_min_and_max_bound(bounds, params_name):
     return min_bound, max_bound
 
 
-def create_bounds(params: list):
+def create_bounds(params: list, div_size: int):
     bounds = []
     for param in params:
-        bounds.append((param/10, param*10))
+        bounds.append((param/div_size, param*div_size))
     return bounds

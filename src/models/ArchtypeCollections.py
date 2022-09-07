@@ -59,9 +59,9 @@ michaelis_menten_inh_competitive_1 = ReactionArchtype(
     assume_product_values={'&E': 0})
 
 
-def create_archtype_michaelis_menten(stimulators=0, allosteric_inhibitors=0, competitive_inhibitors=0):
+def create_archtype_michaelis_menten(stimulators=0, stimulator_weak=0, allosteric_inhibitors=0, competitive_inhibitors=0):
 
-    if stimulators + allosteric_inhibitors + competitive_inhibitors == 0:
+    if stimulators + allosteric_inhibitors + competitive_inhibitors + stimulator_weak == 0:
         return michaelis_menten
 
     # create the archtype
@@ -94,6 +94,24 @@ def create_archtype_michaelis_menten(stimulators=0, allosteric_inhibitors=0, com
         # fill assume parameters values
         assume_parameters_values.update({f'Ka{i}': 0.01 for i in range(stimulators)})
 
+    if stimulator_weak > 0:
+        # weak stimulators represent that stimulant is not required for the reaction to occur
+        stim_str = '+('
+        for i in range(stimulator_weak):
+            stim_str += f'&W{i}*Kw{i}+'
+        
+        upper_equation += stim_str[:-1] + ')'
+
+        # fill extra states
+        extra_states = tuple([f'&W{i}' for i in range(stimulator_weak)])
+        total_extra_states += extra_states
+
+        # fill parameters
+        parameters += tuple([f'Kw{i}' for i in range(stimulator_weak)])
+
+        # fill assume parameters values
+        assume_parameters_values.update({f'Kw{i}': 0.01 for i in range(stimulator_weak)})
+
     if allosteric_inhibitors > 0:
         # add the allosteric inhibitors to the equation
         inhb_allo_str = '*(1+'
@@ -116,13 +134,13 @@ def create_archtype_michaelis_menten(stimulators=0, allosteric_inhibitors=0, com
     
     if competitive_inhibitors > 0:
         # add the competitive inhibitors to the equation
-        inhb_comp_str = '(Km*1+'
+        inhb_comp_str = '(Km*(1+'
         for i in range(competitive_inhibitors):
             inhb_comp_str += f'&I{i}*Kic{i}+'
         
-        inhb_comp_str = inhb_comp_str[:-1] + ')'
+        inhb_comp_str = inhb_comp_str[:-1] + '))'
 
-        lower_equation = inhb_comp_str + lower_equation[4:]
+        lower_equation = inhb_comp_str + lower_equation[3:]
 
         # fill extra states
         extra_states = tuple([f'&I{i}' for i in range(competitive_inhibitors)])

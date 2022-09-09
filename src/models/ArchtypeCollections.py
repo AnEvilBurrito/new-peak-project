@@ -96,11 +96,11 @@ def create_archtype_michaelis_menten(stimulators=0, stimulator_weak=0, allosteri
 
     if stimulator_weak > 0:
         # weak stimulators represent that stimulant is not required for the reaction to occur
-        stim_str = '+('
+        stim_weak_str = '(Vmax+'
         for i in range(stimulator_weak):
-            stim_str += f'&W{i}*Kw{i}+'
+            stim_weak_str += f'&W{i}*Kw{i}+'
         
-        upper_equation += stim_str[:-1] + ')'
+        upper_equation = stim_weak_str[:-1] + ')' + upper_equation[4:]
 
         # fill extra states
         extra_states = tuple([f'&W{i}' for i in range(stimulator_weak)])
@@ -110,7 +110,7 @@ def create_archtype_michaelis_menten(stimulators=0, stimulator_weak=0, allosteri
         parameters += tuple([f'Kw{i}' for i in range(stimulator_weak)])
 
         # fill assume parameters values
-        assume_parameters_values.update({f'Kw{i}': 0.01 for i in range(stimulator_weak)})
+        assume_parameters_values.update({f'Kw{i}': 100 for i in range(stimulator_weak)})
 
     if allosteric_inhibitors > 0:
         # add the allosteric inhibitors to the equation

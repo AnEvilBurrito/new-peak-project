@@ -21,12 +21,12 @@ mass_action_21 = ReactionArchtype(
     'Mass Action',
     ('&A', '&B'), ('&C',),
     ('ka', 'kd'),
-    'ka*&A*&B - kd*&C',
+    'ka*&A*&B',
     assume_parameters_values={'ka': 0.001, 'kd': 0.01},
     assume_reactant_values={'&A': 100, '&B': 100},
     assume_product_values={'&C': 0},
     reversible=True,
-    reverse_rate_law='kd*&C- ka*&A*&B')
+    reverse_rate_law='kd*&C')
 
 simple_rate_law = ReactionArchtype(
     'Simple Rate Law',
@@ -68,6 +68,47 @@ michaelis_menten_inh_competitive_1 = ReactionArchtype(
     assume_product_values={'&E': 0})
 
 
+def create_archtype_mass_action(reactant_count=1, product_count=1, allo_stimulators=0, additive_stimulators=0, allo_inhibitors=0, comp_inhibitors=0):
+    reactants = tuple(f'&R{i}' for i in range(reactant_count))
+    products = tuple(f'&P{i}' for i in range(product_count))
+    parameters = ('Ka', 'Kd')
+    forw_rate_law = 'Ka'
+    for i in range(reactant_count):
+        forw_rate_law += f'*&R{i}'
+    rev_rate_law = 'Kd'
+    for i in range(product_count):
+        rev_rate_law += f'*&P{i}'
+
+    total_extra_states = ()
+
+    if allo_stimulators > 0:
+        pass 
+
+    if additive_stimulators > 0:
+        pass
+
+    if allo_inhibitors > 0:
+        pass
+
+    if comp_inhibitors > 0:
+        pass
+    
+
+
+    # return ReactionArchtype(
+    #     'Mass Action General',
+    #     reactants, products,
+    #     parameters,
+    #     rate_law,
+    #     assume_parameters_values={parameter: 0.001 for parameter in parameters},
+    #     assume_reactant_values={reactant: 100 for reactant in reactants},
+    #     assume_product_values={product: 0 for product in products},
+    #     reversible=True,
+    #     reverse_rate_law='*'.join(f'k{i}*{product}' for i, product in enumerate(products)))
+
+    
+
+
 def create_archtype_michaelis_menten(stimulators=0, stimulator_weak=0, allosteric_inhibitors=0, competitive_inhibitors=0):
 
     if stimulators + allosteric_inhibitors + competitive_inhibitors + stimulator_weak == 0:
@@ -101,7 +142,7 @@ def create_archtype_michaelis_menten(stimulators=0, stimulator_weak=0, allosteri
         parameters += tuple([f'Ka{i}' for i in range(stimulators)])
 
         # fill assume parameters values
-        assume_parameters_values.update({f'Ka{i}': 0.01 for i in range(stimulators)})
+        assume_parameters_values.update({f'Ka{i}': 1e-4 for i in range(stimulators)})
 
     if stimulator_weak > 0:
         # weak stimulators represent that stimulant is not required for the reaction to occur
@@ -119,7 +160,7 @@ def create_archtype_michaelis_menten(stimulators=0, stimulator_weak=0, allosteri
         parameters += tuple([f'Kw{i}' for i in range(stimulator_weak)])
 
         # fill assume parameters values
-        assume_parameters_values.update({f'Kw{i}': 100 for i in range(stimulator_weak)})
+        assume_parameters_values.update({f'Kw{i}': 1e-4 for i in range(stimulator_weak)})
 
     if allosteric_inhibitors > 0:
         # add the allosteric inhibitors to the equation
@@ -139,7 +180,7 @@ def create_archtype_michaelis_menten(stimulators=0, stimulator_weak=0, allosteri
         parameters += tuple([f'Kil{i}' for i in range(allosteric_inhibitors)])
 
         # fill assume parameters values
-        assume_parameters_values.update({f'Kil{i}': 0.01 for i in range(allosteric_inhibitors)})
+        assume_parameters_values.update({f'Kil{i}': 0.001 for i in range(allosteric_inhibitors)})
     
     if competitive_inhibitors > 0:
         # add the competitive inhibitors to the equation
@@ -159,7 +200,7 @@ def create_archtype_michaelis_menten(stimulators=0, stimulator_weak=0, allosteri
         parameters += tuple([f'Kic{i}' for i in range(competitive_inhibitors)])
 
         # fill assume parameters values
-        assume_parameters_values.update({f'Kic{i}': 0.01 for i in range(competitive_inhibitors)})
+        assume_parameters_values.update({f'Kic{i}': 0.001 for i in range(competitive_inhibitors)})
 
     full_equation = f'{upper_equation}/{lower_equation}'
 

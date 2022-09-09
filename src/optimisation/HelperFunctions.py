@@ -33,12 +33,16 @@ def generate_min_and_max_bound(bounds, params_name):
     return min_bound, max_bound
 
 
-def create_bounds(params: list, div_size: int = 10, min_val: float = -1, max_val: float = -1):
+def create_bounds(params: list, div_size: int = 10, min_val: float = -1, max_val: float = -1, custom_div_size: tuple = ()):
 
     bounds = []
     if min_val > 0 and max_val > 0:
         for p in params:
             bounds.append((min_val, max_val))
+    elif len(custom_div_size) > 0:
+        # custom div size tuple: (INT min div,INT max div)
+        for p in params: 
+            bounds.append((p/custom_div_size[0], p/custom_div_size[1]))
     else: 
         for param in params:
             bounds.append((param/div_size, param*div_size))

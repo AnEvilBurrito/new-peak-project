@@ -28,6 +28,15 @@ mass_action_21 = ReactionArchtype(
     reversible=True,
     reverse_rate_law='kd*&C- ka*&A*&B')
 
+simple_rate_law = ReactionArchtype(
+    'Simple Rate Law',
+    ('&A',), ('&B',),
+    ('kf',),
+    'kf*&A',
+    assume_parameters_values={'kf': 0.01},
+    assume_reactant_values={'&A': 100},
+    assume_product_values={'&B': 0})
+
 michaelis_menten_stim = ReactionArchtype(
     'Michaelis Menten',
     ('&S',), ('&E',),

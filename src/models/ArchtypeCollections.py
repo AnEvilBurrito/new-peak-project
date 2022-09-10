@@ -68,7 +68,17 @@ michaelis_menten_inh_competitive_1 = ReactionArchtype(
     assume_product_values={'&E': 0})
 
 
-def create_archtype_mass_action(reactant_count=1, product_count=1, allo_stimulators=0, additive_stimulators=0, allo_inhibitors=0, comp_inhibitors=0):
+def create_archtype_mass_action(
+                    reactant_count=1, 
+                    product_count=1, 
+                    allo_stimulators=0, 
+                    additive_stimulators=0, 
+                    allo_inhibitors=0, 
+                    comp_inhibitors=0,
+                    rev_allo_stimulators=0,
+                    rev_additive_stimulators=0,
+                    rev_allo_inhibitors=0,
+                    rev_comp_inhibitors=0,):
     reactants = tuple(f'&R{i}' for i in range(reactant_count))
     products = tuple(f'&P{i}' for i in range(product_count))
     parameters = ('Ka', 'Kd')
@@ -95,10 +105,10 @@ def create_archtype_mass_action(reactant_count=1, product_count=1, allo_stimulat
         total_extra_states += extra_states
 
         # fill parameters
-        parameters += tuple([f'Ka{i}' for i in range(allo_stimulators)])
+        parameters += tuple([f'Ks{i}' for i in range(allo_stimulators)])
 
         # fill assume parameters values
-        assume_parameters_values.update({f'Ka{i}': 1e-4 for i in range(allo_stimulators)})
+        assume_parameters_values.update({f'Ks{i}': 1e-4 for i in range(allo_stimulators)})
 
     if additive_stimulators > 0:
         # weak stimulators represent that stimulant is not required for the reaction to occur
@@ -123,11 +133,11 @@ def create_archtype_mass_action(reactant_count=1, product_count=1, allo_stimulat
         # applied to the reverse rate law, with different parameter names 
 
         # add the stimulators to the equation
-        stim_str = '*('
+        altered_str = '*(1/(1+'
         for i in range(allo_inhibitors):
-            stim_str += f'&I{i}*Ki{i}+'
+            altered_str += f'&I{i}*Ki{i}+'
 
-        rev_rate_law += stim_str[:-1] + ')'
+        forw_rate_law += altered_str[:-1] + '))'
 
         # fill extra states
         extra_states = tuple([f'&I{i}' for i in range(allo_inhibitors)])
@@ -143,12 +153,14 @@ def create_archtype_mass_action(reactant_count=1, product_count=1, allo_stimulat
         # add the inhibitors to the equation, exact same thing as addi_stimulators but
         # applied to the reverse rate law, with different parameter names
 
+        assert additive_stimulators == 0, 'Currently this function does not support having both additive and competitive inhibitors'
+
         # add the stimulators to the equation
-        stim_str = '(Kd+'
+        stim_str = '(Ka/(1+'
         for i in range(comp_inhibitors):
             stim_str += f'&C{i}*Kc{i}+'
 
-        rev_rate_law = stim_str[:-1] + ')' + rev_rate_law[2:]
+        forw_rate_law = stim_str[:-1] + '))' + forw_rate_law[2:]
 
         # fill extra states
         extra_states = tuple([f'&C{i}' for i in range(comp_inhibitors)])
@@ -160,8 +172,90 @@ def create_archtype_mass_action(reactant_count=1, product_count=1, allo_stimulat
         # fill assume parameters values
         assume_parameters_values.update({f'Kc{i}': 1e-4 for i in range(comp_inhibitors)})
 
+    # reverse rate law MODIFICATIONS
+
+    if rev_allo_stimulators > 0:
+        # add the stimulators to the equation
+        stim_str = '*('
+        for i in range(rev_allo_stimulators):
+            stim_str += f'?A{i}*Ksr{i}+'
+        
+        rev_rate_law += stim_str[:-1] + ')'
+
+        # fill extra states
+        extra_states = tuple([f'?A{i}' for i in range(rev_allo_stimulators)])
+        total_extra_states += extra_states
+
+        # fill parameters
+        parameters += tuple([f'Ksr{i}' for i in range(rev_allo_stimulators)])
+
+        # fill assume parameters values
+        assume_parameters_values.update({f'rKs{i}': 1e-4 for i in range(rev_allo_stimulators)})
+
+    if rev_additive_stimulators > 0:
+        # weak stimulators represent that stimulant is not required for the reaction to occur
+        stim_weak_str = '(Kd+'
+        for i in range(rev_additive_stimulators):
+            stim_weak_str += f'?W{i}*Kwr{i}+'
+        
+        rev_rate_law = stim_weak_str[:-1] + ')' + rev_rate_law[2:]
+
+        # fill extra states
+        extra_states = tuple([f'?W{i}' for i in range(rev_additive_stimulators)])
+        total_extra_states += extra_states
+
+        # fill parameters
+        parameters += tuple([f'Kwr{i}' for i in range(rev_additive_stimulators)])
+
+        # fill assume parameters values
+        assume_parameters_values.update({f'Kwr{i}': 1e-4 for i in range(rev_additive_stimulators)})
+
+    if rev_allo_inhibitors > 0:
+        # add the inhibitors to the equation, exact same thing as allo_stimulators but 
+        # applied to the reverse rate law, with different parameter names 
+
+        # add the stimulators to the equation
+        altered_str = '*(1/(1+'
+        for i in range(rev_allo_inhibitors):
+            altered_str += f'?I{i}*Kir{i}+'
+
+        rev_rate_law += altered_str[:-1] + '))'
+
+        # fill extra states
+        extra_states = tuple([f'?I{i}' for i in range(rev_allo_inhibitors)])
+        total_extra_states += extra_states
+
+        # fill parameters
+        parameters += tuple([f'Kir{i}' for i in range(rev_allo_inhibitors)])
+
+        # fill assume parameters values
+        assume_parameters_values.update({f'Kir{i}': 1e-4 for i in range(rev_allo_inhibitors)})
+
+    if rev_comp_inhibitors > 0:
+        # add the inhibitors to the equation, exact same thing as addi_stimulators but
+        # applied to the reverse rate law, with different parameter names
+
+        assert rev_additive_stimulators == 0, 'Currently this function does not support having both additive and competitive inhibitors'
+
+        # add the stimulators to the equation
+        stim_str = '(Kd/(1+'
+        for i in range(rev_comp_inhibitors):
+            stim_str += f'?C{i}*Kcr{i}+'
+
+        rev_rate_law = stim_str[:-1] + '))' + rev_rate_law[2:]
+
+        # fill extra states
+        extra_states = tuple([f'?C{i}' for i in range(rev_comp_inhibitors)])
+        total_extra_states += extra_states
+
+        # fill parameters
+        parameters += tuple([f'Kcr{i}' for i in range(rev_comp_inhibitors)])
+
+        # fill assume parameters values
+        assume_parameters_values.update({f'Kcr{i}': 1e-4 for i in range(rev_comp_inhibitors)})
+
     return ReactionArchtype(
-        'Mass Action',
+        'Mass Action General',
         reactants, products,
         parameters,
         forw_rate_law,
@@ -170,7 +264,7 @@ def create_archtype_mass_action(reactant_count=1, product_count=1, allo_stimulat
         assume_reactant_values={f'&R{i}': 100 for i in range(reactant_count)},
         assume_product_values={f'&P{i}': 0 for i in range(product_count)},
         reversible=True,
-        rev_rate_law=rev_rate_law)
+        reverse_rate_law=rev_rate_law)
 
 
 def create_archtype_michaelis_menten(stimulators=0, stimulator_weak=0, allosteric_inhibitors=0, competitive_inhibitors=0):

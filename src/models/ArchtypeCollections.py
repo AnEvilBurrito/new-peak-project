@@ -67,6 +67,141 @@ michaelis_menten_inh_competitive_1 = ReactionArchtype(
     assume_reactant_values={'&S': 100},
     assume_product_values={'&E': 0})
 
+degredation = ReactionArchtype(
+    'Degredation',
+    ('&A',), (),
+    ('Kdeg',),
+    'Kdeg*&A',
+    assume_parameters_values={'Kdeg': 0.01},
+    assume_reactant_values={'&A': 100},
+    assume_product_values={})
+
+synthesis = ReactionArchtype(
+    'Synthesis',
+    (), ('&A',),
+    ('Ksyn',),
+    'Ksyn',
+    assume_parameters_values={'Ksyn': 0.1},
+    assume_reactant_values={},
+    assume_product_values={'&A': 0})
+
+def create_archtype_synthesis(allo_stimulators=0, allo_inhibitors=0):
+    reactants = ()
+    products = ('&R',)
+    parameters = ('Ksyn',)
+    rate_law = 'Ksyn'
+    extra_states = ()
+    assume_reactant_values = {}
+    assume_product_values = {'&R': 0}
+    assume_parameters_values = {'Ksyn': 0.1}
+    total_extra_states = ()
+    if allo_stimulators > 0:
+        # add the stimulators to the equation
+        stim_str = '*('
+        for i in range(allo_stimulators):
+            stim_str += f'&A{i}*Ks{i}+'
+        
+        rate_law += stim_str[:-1] + ')'
+
+        # fill extra states
+        extra_states = tuple([f'&A{i}' for i in range(allo_stimulators)])
+        total_extra_states += extra_states
+
+        # fill parameters
+        parameters += tuple([f'Ks{i}' for i in range(allo_stimulators)])
+
+        # fill assume parameters values
+        assume_parameters_values.update({f'Ks{i}': 1e-4 for i in range(allo_stimulators)})
+
+    if allo_inhibitors > 0:
+        # add the inhibitors to the equation
+        inh_str = '*(1/(1+'
+        for i in range(allo_inhibitors):
+            inh_str += f'&I{i}*Ki{i}+'
+        
+        rate_law += inh_str[:-1] + '))'
+
+        # fill extra states
+        extra_states += tuple([f'&I{i}' for i in range(allo_inhibitors)])
+        total_extra_states += extra_states
+
+        # fill parameters
+        parameters += tuple([f'Ki{i}' for i in range(allo_inhibitors)])
+
+        # fill assume parameters values
+        assume_parameters_values.update({f'Ki{i}': 1e-4 for i in range(allo_inhibitors)})
+
+    return ReactionArchtype(
+        'Synthesis',
+        reactants, products,
+        parameters,
+        rate_law,
+        extra_states=extra_states,
+        assume_reactant_values=assume_reactant_values,
+        assume_product_values=assume_product_values,
+        assume_parameters_values=assume_parameters_values)
+
+def create_archtype_degredation(allo_stimulators=0, allo_inhibitors=0):
+    """
+    Creates a degredation reaction archtype with the given number of
+    stimulators and inhibitors.
+    """
+    reactants = ('&R',)
+    products = ()
+    parameters = ('Kdeg',)
+    rate_law = 'Kdeg*&R'
+    assume_reactant_values = {'&R': 100}
+    assume_product_values = {}
+    extra_states = ()
+    assume_parameters_values = {'Kdeg': 0.01}
+    total_extra_states = ()
+
+    if allo_stimulators > 0:
+        # add the stimulators to the equation
+        stim_str = '*('
+        for i in range(allo_stimulators):
+            stim_str += f'&A{i}*Ks{i}+'
+        
+        rate_law += stim_str[:-1] + ')'
+
+        # fill extra states
+        extra_states = tuple([f'&A{i}' for i in range(allo_stimulators)])
+        total_extra_states += extra_states
+
+        # fill parameters
+        parameters += tuple([f'Ks{i}' for i in range(allo_stimulators)])
+
+        # fill assume parameters values
+        assume_parameters_values.update({f'Ks{i}': 1e-4 for i in range(allo_stimulators)})
+
+    if allo_inhibitors > 0:
+        # add the inhibitors to the equation
+        inh_str = '*(1/(1+'
+        for i in range(allo_inhibitors):
+            inh_str += f'&I{i}*Ki{i}+'
+        
+        rate_law += inh_str[:-1] + '))'
+
+        # fill extra states
+        extra_states += tuple([f'&I{i}' for i in range(allo_inhibitors)])
+        total_extra_states += extra_states
+
+        # fill parameters
+        parameters += tuple([f'Ki{i}' for i in range(allo_inhibitors)])
+
+        # fill assume parameters values
+        assume_parameters_values.update({f'Ki{i}': 1e-4 for i in range(allo_inhibitors)})
+
+
+    return ReactionArchtype(
+        'Degredation General',
+        reactants, products,
+        parameters,
+        rate_law,
+        extra_states=extra_states,
+        assume_parameters_values=assume_parameters_values,
+        assume_reactant_values=assume_reactant_values,
+        assume_product_values=assume_product_values)
 
 def create_archtype_mass_action(
                     reactant_count=1, 

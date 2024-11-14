@@ -1,3 +1,4 @@
+import re
 from typing import Dict, Union, Tuple
 from copy import copy
 from .ReactionArchtype import ReactionArchtype
@@ -227,14 +228,28 @@ class Reaction:
         while i < len(self.products_names):
             archtype_name = self.archtype.products[i]
             replacement_name = self.products_names[i]
-            rate_law_str = rate_law_str.replace(archtype_name, replacement_name)
+            # Use regular expression to replace whole words only
+            pattern = r'(?<!\w)' + re.escape(archtype_name) + r'(?!\w)'
+            rate_law_str = re.sub(pattern, replacement_name, rate_law_str)
             i += 1
 
         i = 0
         while i < len(self.archtype.extra_states):
             archtype_name = self.archtype.extra_states[i]
             replacement_name = self.extra_states[i]
-            rate_law_str = rate_law_str.replace(archtype_name, replacement_name)
+            # Use regular expression to replace whole words only
+            pattern = r'(?<!\w)' + re.escape(archtype_name) + r'(?!\w)'
+            rate_law_str = re.sub(pattern, replacement_name, rate_law_str)
+            i += 1
+
+
+        i = 0
+        while i < len(self.archtype.extra_states):
+            archtype_name = self.archtype.extra_states[i]
+            replacement_name = self.extra_states[i]
+            # Use regular expression to replace whole words only
+            pattern = r'(?<!\w)' + re.escape(archtype_name) + r'(?!\w)'
+            rate_law_str = re.sub(pattern, replacement_name, rate_law_str)
             i += 1
 
         r_index_p = r_index 
@@ -248,7 +263,9 @@ class Reaction:
                 replacement_name = str(self.linked_parameters[i])
             else: 
                 replacement_name = r_index_p + '_' + archtype_name
-            rate_law_str = rate_law_str.replace(archtype_name, str(replacement_name))
+            # Use regular expression to replace whole words only
+            pattern = r'(?<!\w)' + re.escape(archtype_name) + r'(?!\w)'
+            rate_law_str = re.sub(pattern, replacement_name, rate_law_str)
             i += 1
 
         return f'{r_index}: {reactant_str} -> {product_str}; {rate_law_str}'

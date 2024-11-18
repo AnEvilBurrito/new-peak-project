@@ -417,7 +417,7 @@ def create_archtype_michaelis_menten(stimulators=0, stimulator_weak=0, allosteri
     lower_equation = '(Km + &S)'
     total_extra_states = ()
     parameters = ('Km', 'Vmax')
-    assume_parameters_values={'Km': 100, 'Vmax': 10}
+    assume_parameters_values={'Km': 100, 'Vmax': 1}
 
     if stimulators > 0:
         # add the stimulators to the equation
@@ -435,7 +435,7 @@ def create_archtype_michaelis_menten(stimulators=0, stimulator_weak=0, allosteri
         parameters += tuple([f'Ka{i}' for i in range(stimulators)])
 
         # fill assume parameters values
-        assume_parameters_values.update({f'Ka{i}': 0.1 for i in range(stimulators)})
+        assume_parameters_values.update({f'Ka{i}': 0.01 for i in range(stimulators)})
 
     if stimulator_weak > 0:
         # weak stimulators represent that stimulant is not required for the reaction to occur
@@ -473,7 +473,7 @@ def create_archtype_michaelis_menten(stimulators=0, stimulator_weak=0, allosteri
         parameters += tuple([f'Kil{i}' for i in range(allosteric_inhibitors)])
 
         # fill assume parameters values
-        assume_parameters_values.update({f'Kil{i}': 0.1 for i in range(allosteric_inhibitors)})
+        assume_parameters_values.update({f'Kil{i}': 0.01 for i in range(allosteric_inhibitors)})
     
     if competitive_inhibitors > 0:
         # add the competitive inhibitors to the equation
@@ -481,7 +481,7 @@ def create_archtype_michaelis_menten(stimulators=0, stimulator_weak=0, allosteri
         for i in range(competitive_inhibitors):
             inhb_comp_str += f'&I{i}*Kic{i}+'
         
-        inhb_comp_str = inhb_comp_str[:-1] + '))'
+        inhb_comp_str = inhb_comp_str[:-1] + ')'
 
         lower_equation = inhb_comp_str + lower_equation[3:]
 

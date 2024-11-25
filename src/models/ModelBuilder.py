@@ -20,6 +20,7 @@ class ModelBuilder:
 
         self.reactions: List[Reaction] = []
         # these two fields are coupled to self.reaction
+        self.pre_compiled = False
         self.states = {}
         self.parameters = {}
 
@@ -108,10 +109,8 @@ class ModelBuilder:
                     raise Exception(f'Reaction name is not unique within the model {reaction.name}')
 
         self.reactions.append(reaction)
-        # NOTE: This is an ugly hack to make sure the reaction is added to the model
-        # TODO: find a better way to do this
-        self.states.update(self.get_state_variables())
-        self.parameters.update(self.get_parameters())
+        # reset the pre_compiled flag, since the model has changed 
+        self.pre_compiled = False
 
     def inject_antimony_string_at(self, ant_string: str, position: str = 'reaction'):
 
@@ -156,6 +155,8 @@ class ModelBuilder:
             if r.name == reaction_name:
                 self.reactions.remove(r)
                 break
+            
+        self.pre_compiled = False
 
     def copy(self, overwrite_name='') -> 'ModelBuilder':
         '''
@@ -205,10 +206,24 @@ class ModelBuilder:
         return_str += f'Number of Custom Strings {len(self.custom_strings)}\n'
         return return_str
 
+    def precompile(self):
+        '''
+        Populates the state and parameter variables list in the class which are used to generate the antimony text 
+        The pre-compiled model will have functionalities for getting and setting specific state and parameter values, 
+        which gets passed directly into the antimony string 
+        '''
+        self.parameters = self.get_parameters()
+        self.states = self.get_state_variables()
+        self.pre_compiled = True
+    
     def get_antimony_model(self):
         '''
         Doc
         '''
+        
+        if not self.pre_compiled:
+            raise Exception('Model must be pre-compiled before generating antimony string, run self.precompile(), the pre-compiled model will have functionalities for getting and setting specific state and parameter values, which gets passed directly into the antimony string')
+        
         antimony_string = ''
 
         antimony_string += f'model {self.name}\n\n'

@@ -257,7 +257,7 @@ class ModelBuilder:
         if 'state' in self.custom_strings:
             antimony_string += self.custom_strings['state']
 
-        all_states = self.get_state_variables()
+        all_states = self.states
         for key, val in all_states.items():
             antimony_string += f'{key}={val}\n'
         antimony_string += '\n'
@@ -269,7 +269,7 @@ class ModelBuilder:
         if 'parameters' in self.custom_strings:
             antimony_string += self.custom_strings['parameters']
 
-        all_params = self.get_parameters()
+        all_params = self.parameters
         for key, val in all_params.items():
             antimony_string += f'{key}={val}\n'
 

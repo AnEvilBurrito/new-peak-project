@@ -29,6 +29,42 @@ class ModelBuilder:
         self.custom_strings = {}
 
         self.roadrunner_model: roadrunner.RoadRunner = None # type: roadrunner.RoadRunner
+        
+    def set_parameter(self, parameter_name: str, value: float):
+        '''
+        Set a parameter value in the model
+        '''
+        if parameter_name not in self.parameters:
+            raise Exception(f'Parameter {parameter_name} not found in the model')
+        if not self.pre_compiled: 
+            raise Exception('Model must be pre-compiled before setting a parameter value, run self.precompile()')
+        self.parameters[parameter_name] = value
+        
+    def get_parameter(self, parameter_name: str) -> float:
+        '''
+        Get a parameter value in the model
+        '''
+        if parameter_name not in self.parameters:
+            raise Exception(f'Parameter {parameter_name} not found in the model')
+        return self.parameters[parameter_name]
+    
+    def set_state(self, state_name: str, value: float):
+        '''
+        Set a state value in the model
+        '''
+        if state_name not in self.states:
+            raise Exception(f'State {state_name} not found in the model')
+        if not self.pre_compiled: 
+            raise Exception('Model must be pre-compiled before setting a state value, run self.precompile()')
+        self.states[state_name] = value
+        
+    def get_state(self, state_name: str) -> float:
+        '''
+        Get a state value in the model
+        '''
+        if state_name not in self.states:
+            raise Exception(f'State {state_name} not found in the model')
+        return self.states[state_name]
 
     def get_parameters(self):
         '''

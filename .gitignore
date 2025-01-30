@@ -134,3 +134,4 @@ dmypy.json
 
 # venv folder 
 new-peak-project/
+src/experiments

@@ -32,7 +32,7 @@ class Reaction:
         product_values: Union[dict, tuple, int, float] = (),
         linked_parameters: Tuple[LinkedParameters] = (),
         use_parameter_from_reaction: str = '',
-        zero_init: bool = False):
+        zero_init: bool = True):
 
         self.archtype = reaction_archtype
         # reactants, products and extra states must be provided in the length of the archtype

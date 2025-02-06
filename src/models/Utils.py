@@ -3,6 +3,7 @@ from models.Reaction import Reaction
 from models.ReactionArchtype import ReactionArchtype
 from models.ArchtypeCollections import *
 
+# pylint: disable=import-error
 import numpy as np
 import pandas as pd
 
@@ -223,7 +224,7 @@ class ModelSpecification:
                 r_params = self.generate_random_parameters(michaelis_menten, rangeScale_params, rangeMultiplier_params)
 
             # add the reaction Ap -> A to the model
-            model.add_reaction(Reaction(michaelis_menten, (specie+'p',), (specie,), parameters_values=tuple(r_params)))
+            model.add_reaction(Reaction(michaelis_menten, (specie+'p',), (specie,), parameters_values=tuple(r_params), zero_init=False))
 
             # generate a random initial value for A
             random_mean = np.random.randint(mean_range_species[0], mean_range_species[1])
@@ -237,7 +238,7 @@ class ModelSpecification:
             model.add_reaction(Reaction(rate_law, (specie,), (specie+'p',),
                                         reactant_values=random_mean,
                                         extra_states=regulators,
-                                        parameters_values=tuple(r_params_reverse)))
+                                        parameters_values=tuple(r_params_reverse), zero_init=False))
 
         '''B Specie reactions'''
 
@@ -252,7 +253,7 @@ class ModelSpecification:
 
             # add the reaction Bp -> B to the model
             model.add_reaction(Reaction(michaelis_menten, (specie+'p',), (specie,),
-                                        parameters_values=tuple(r_params)))
+                                        parameters_values=tuple(r_params), zero_init=False))
 
             # generate a random initial value for B
             random_mean = np.random.randint(mean_range_species[0], mean_range_species[1])
@@ -266,7 +267,7 @@ class ModelSpecification:
             model.add_reaction(Reaction(rate_law, (specie,), (specie+'p',),
                                         reactant_values=random_mean,
                                         extra_states=regulators,
-                                        parameters_values=tuple(r_params_reverse)))
+                                        parameters_values=tuple(r_params_reverse), zero_init=False))
 
 
         '''C Specie reactions'''
@@ -282,9 +283,9 @@ class ModelSpecification:
 
         for specie in self.C_species:
             model.add_reaction(Reaction(rate_law_C, (specie,), (specie+'p',),
-                            extra_states=B_species_tuple_phos, parameters_values=tuple(c_params)))
+                            extra_states=B_species_tuple_phos, parameters_values=tuple(c_params), zero_init=False))
             model.add_reaction(Reaction(michaelis_menten, (specie+'p',),
-                            (specie,), reactant_values=0, product_values=100))
+                            (specie,), reactant_values=0, product_values=100, zero_init=False))
 
         model.precompile()
         # add stimulation reactions
@@ -508,3 +509,14 @@ def generate_model_timecourse_data(model_spec, runner_model, feature_df, initial
     runner_model = manual_reset(runner_model, initial_values)
     output_df = pd.DataFrame(all_outputs)
     return output_df
+
+# Engineering Data Processing Methods 
+
+def last_time_point_method(time_course_data, selected_species = None):
+    if selected_species is None:
+        selected_species = time_course_data.columns
+    else:
+        selected_species = selected_species
+    selected_time_course_data = time_course_data[selected_species]
+    last_time_points = selected_time_course_data.applymap(lambda x: x[-1])
+    return last_time_points

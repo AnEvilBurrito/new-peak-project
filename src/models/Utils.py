@@ -161,13 +161,17 @@ class ModelSpecification:
         regulators_for_specie = sorted(
             regulators_for_specie, key=lambda x: x[1], reverse=True)
         regulators_sorted = [r[0] for r in regulators_for_specie]
-        regulators_sorted_phos = [r[0]+'p' for r in regulators_for_specie]
-
+        # regulators_sorted_phos = [r[0]+'p' for r in regulators_for_specie]
+        regulators_sorted_modified = []
+        for r in regulators_sorted:
+            if 'D' in r:
+                regulators_sorted_modified.append(r)
+            else:
+                regulators_sorted_modified.append(r+'p')
         # print(f'Sorted regulators information: {regulators_for_specie}')
         # print(f'Final regulators for {specie}: {regulators_sorted_phos}')
         # print(f'Rate law for {specie}: {rate_law}')
-
-        return rate_law, regulators_sorted_phos
+        return rate_law, regulators_sorted_modified
 
 
     # generate random parameters informed by a scale

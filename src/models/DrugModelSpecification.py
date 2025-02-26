@@ -99,6 +99,13 @@ class DrugModelSpecification(ModelSpecification):
         ''' 
         Clears all drugs from the model. 
         '''
+        # remove regulations based on species
+        for drug in self.drug_list: 
+            for i, reg in enumerate(self.regulations):
+                if reg[0] == drug.name: 
+                    self.regulations.remove(reg)
+                    self.regulation_types.pop(i)
+                    
         self.drug_list = []
         self.drug_values = {}
         self.D_species = []

@@ -7,6 +7,7 @@ from models.ArchtypeCollections import *
 import numpy as np
 import pandas as pd
 from tqdm import tqdm
+from copy import deepcopy
 
 class ModelSpecification:
 
@@ -93,7 +94,7 @@ class ModelSpecification:
             if verbose == 1:
                 print(f'Feedback Regulation {i}: {reg} - {reg_types[i]}')
 
-        # finally, each Ap index affects every B -> Bp reaction index
+        # each Ap index affects every B -> Bp reaction index
         for i in range(NA):
             regulations.append((f'A{i}', f'B{i}'))
             reg_types.append('up')
@@ -134,6 +135,9 @@ class ModelSpecification:
         self.C_allosteric_inhibitors = allosteric_inhibitors
         self.C_competitive_inhibitors = competitive_inhibitors
 
+    def generate_specifications_new(self):
+        # systematically generate C specie regulations insead of defining varialbles for each type of regulation
+        pass 
 
     def generate_archtype_and_regulators(self, specie):
 
@@ -175,7 +179,9 @@ class ModelSpecification:
 
 
     # generate random parameters informed by a scale
-    def generate_random_parameters(self, reaction_archtype: ReactionArchtype, scale_range, multiplier_range):
+    def generate_random_parameters(self, reaction_archtype: ReactionArchtype, scale_range, multiplier_range, random_seed=None):
+        if random_seed is not None:
+            np.random.seed(random_seed)
 
         assumed_values = reaction_archtype.assume_parameters_values
         # print(f'Assumed values: {assumed_values}')
@@ -305,6 +311,9 @@ class ModelSpecification:
             print('\n')
             
         return model 
+    
+    def generate_network_new(self):
+        pass 
 
 
 ### Helper functions for generating data
@@ -608,3 +617,73 @@ def dynamic_features_method(time_course_data, selected_features=None):
     new_df = pd.DataFrame(all_dynamic_features, columns=[s + '_' + dynamic_feature for s in selected_features for dynamic_feature in dynamic_feature_label], index=time_course_data.index)
 
     return new_df
+
+
+### Suboptimal Model Generation Methods 
+
+def specific_pruning(model_spec: ModelSpecification, pruned_regulations):
+    '''
+    Prune specific regulations from the model based on the input list of regulations
+    '''
+    pass 
+
+
+def systematic_edge_pruning(old_model_spec: ModelSpecification, old_model: ModelBuilder, edge_number: int, random_seed=42): 
+    '''
+    Prune the model by removing `edge_number` number of regulations from the model_spec randomly 
+    '''
+    regulations = deepcopy(old_model_spec.regulations)
+    regulation_types = deepcopy(old_model_spec.regulation_types)
+    new_model_spec = deepcopy(old_model_spec)
+    
+    assert len(regulations) > edge_number, "Error in systematic edge pruning: The number of regulations to prune must be less than the total number of regulations in the original model specification"
+    
+    assert edge_number > 0, "Error in systematic edge pruning: The number of regulations to prune must be greater than 0"
+
+    i = 0 
+    while i < edge_number:
+        # randomly select an index to remove
+        index = np.random.randint(0, len(regulations))
+        del regulations[index]
+        del regulation_types[index]
+        i += 1
+    
+    new_model_spec.regulations = regulations
+    new_model_spec.regulation_types = regulation_types
+    
+    # generate a new model with the pruned regulations
+    new_model = new_model_spec.generate_network('sub_'+old_model.name, (0, 100), (0.1, 1), (0.1, 1), verbose=0, random_seed=random_seed)
+    
+    # copy the initial values from the old model to the new model    
+    params, states = old_model.parameters.copy(), old_model.states.copy()
+    for p in params:
+        if p in new_model.parameters:
+            new_model.parameters[p] = old_model.parameters[p]
+    for s in states:
+        if s in new_model.states:
+            new_model.states[s] = old_model.states[s]
+            
+    return new_model
+    
+def copy_over_params_states(old_model: ModelBuilder, new_model: ModelBuilder):
+    '''
+    for each parameter and state in the old model, copy over the values to the new model if the parameter/state exists in the new model
+    '''
+    params, states = old_model.parameters.copy(), old_model.states.copy()
+    for p in params:
+        if p in new_model.parameters:
+            new_model.parameters[p] = old_model.parameters[p]
+    for s in states:
+        if s in new_model.states:
+            new_model.states[s] = old_model.states[s]
+
+    return new_model
+
+def systematic_specie_pruning(old_model_spec: ModelSpecification, old_model: ModelBuilder, specie_number: int): 
+    '''
+    Prune the model by removing `specie_number` number of species from the model_spec randomly. The remaining model will have at least one specie in A and B which are connected by a regulation, and one specie in C.
+    '''
+    pass
+
+
+

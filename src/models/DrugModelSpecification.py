@@ -64,8 +64,6 @@ class DrugModelSpecification(ModelSpecification):
         self.drug_values = {}
         self.D_species = []
         
-        
-        
     def add_drug(self, drug: Drug, value=None):
         ''' 
         Adds a drug to the model. 
@@ -96,6 +94,14 @@ class DrugModelSpecification(ModelSpecification):
             reg = (drug.name, specie)
             self.regulations.append(reg)
             self.regulation_types.append(type)
+            
+    def clear_drugs(self):
+        ''' 
+        Clears all drugs from the model. 
+        '''
+        self.drug_list = []
+        self.drug_values = {}
+        self.D_species = []
         
     def generate_specifications(self, random_seed, NA, NR, verbose=1):
         return super().generate_specifications(random_seed, NA, NR, verbose)

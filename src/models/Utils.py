@@ -105,7 +105,7 @@ class ModelSpecification:
         
         # randomise the number of stimulators and inhibitors for len(B_species) 
 
-        stimulator_number = np.random.randint(0, len(B_species))
+        stimulator_number = np.random.randint(0, len(B_species)+1)
         if stimulator_number == 0:
             strong_stimulators = 0
             weak_stimulators = 0

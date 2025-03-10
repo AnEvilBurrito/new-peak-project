@@ -632,6 +632,9 @@ def systematic_edge_pruning(old_model_spec: ModelSpecification, old_model: Model
     '''
     Prune the model by removing `edge_number` number of regulations from the model_spec randomly 
     '''
+    # fix the random seed for reproducibility
+    np.random.seed(random_seed)
+    
     regulations = deepcopy(old_model_spec.regulations)
     regulation_types = deepcopy(old_model_spec.regulation_types)
     new_model_spec = deepcopy(old_model_spec)

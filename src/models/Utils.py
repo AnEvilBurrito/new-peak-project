@@ -859,7 +859,7 @@ def systematic_edge_pruning(old_model_spec: ModelSpecification, old_model: Model
     new_model_spec.regulation_types = regulation_types
     
     # generate a new model with the pruned regulations
-    new_model = new_model_spec.generate_network_old('sub_'+old_model.name, (0, 100), (0.1, 1), (0.1, 1), verbose=0, random_seed=random_seed)
+    new_model = new_model_spec.generate_network('sub_'+old_model.name, (0, 100), (0.1, 1), (0.1, 1), verbose=0, random_seed=random_seed)
     
     # copy the initial values from the old model to the new model    
     new_model = copy_over_params_states(old_model, new_model)

@@ -110,8 +110,15 @@ class DrugModelSpecification(ModelSpecification):
         self.drug_values = {}
         self.D_species = []
         
-    def generate_specifications(self, random_seed, NA, NR, verbose=1):
-        return super().generate_specifications(random_seed, NA, NR, verbose)
+    def __str__(self):
+        disp_text = super().__str__()
+        disp_text += "Drugs:\n"
+        for drug in self.drug_list:
+            disp_text += str(drug) + "\n"
+        return disp_text
+        
+    def generate_specifications_old(self, random_seed, NA, NR, verbose=1):
+        return super().generate_specifications_old(random_seed, NA, NR, verbose)
     
     def generate_network(self, network_name, mean_range_species, rangeScale_params, rangeMultiplier_params, verbose=1, random_seed=None):
         '''

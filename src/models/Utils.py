@@ -35,7 +35,8 @@ class ModelSpecification:
                 f'C Allosteric Inhibitors: {self.C_allosteric_inhibitors}\n' + \
                 f'C Competitive Inhibitors: {self.C_competitive_inhibitors}\n'
 
-    def generate_specifications(self, random_seed, NA, NR, verbose=1):
+    def generate_specifications_old(self, random_seed, NA, NR, verbose=1):
+        # WARNING: This method is deprecated and should not be used
         random_seed_number = random_seed  # None if do not want to fix the seed
         if random_seed_number is not None:
             np.random.seed(random_seed_number)
@@ -135,9 +136,89 @@ class ModelSpecification:
         self.C_allosteric_inhibitors = allosteric_inhibitors
         self.C_competitive_inhibitors = competitive_inhibitors
 
-    def generate_specifications_new(self):
+    def generate_specifications(self, random_seed, NA, NR, verbose=1):
         # systematically generate C specie regulations insead of defining varialbles for each type of regulation
-        pass 
+        random_seed_number = random_seed  # None if do not want to fix the seed
+        if random_seed_number is not None:
+            np.random.seed(random_seed_number)
+            
+        if verbose == 1:
+            print('--- Generating a random network ---')
+            print(f'Random Seed: {random_seed_number}')
+            print(f'Number of A Species: {NA}')
+            print(f'Number of B Species: {NA}')
+            print(f'Number of C Species: 1')
+            print(f'Number of Regulations: {NR}')
+            print('\n')
+
+        # based on the `NA` parameter, create a number of species for A
+
+        A_species = [f'A{i}' for i in range(NA)]
+        B_species = [f'B{i}' for i in range(NA)]
+        C_species = ['C']
+
+        self.A_species = A_species
+        self.B_species = B_species
+        self.C_species = C_species
+        
+        # based on the number of NR, create random connections between any two species in the network
+        regulation_types_choice = ['up', 'down']
+        regulations = []
+        reg_types = []
+
+        all_species = A_species + B_species + C_species
+        B_and_C = B_species + C_species
+
+        # max attempts is the permutation of specie C and B * 100
+        max_attempt = len(B_and_C)**2 * 100
+        current_attempt = 0
+        while len(regulations) < NR and current_attempt < max_attempt:
+            from_specie = np.random.choice(B_and_C)
+            to_specie = np.random.choice(all_species)
+            reg = (from_specie, to_specie)
+            reverse_reg = (to_specie, from_specie)
+
+            # also exclude self-regulations and B -> C regulations
+            if from_specie == to_specie or (from_specie in B_species and to_specie in C_species):
+                continue
+
+            if reg not in regulations and reverse_reg not in regulations:
+                reg_type = np.random.choice(regulation_types_choice)
+                regulations.append(reg)
+                reg_types.append(reg_type)
+
+
+        if current_attempt == max_attempt:
+            print('Failed to generate the network in the given number of attempts, max attempt:', max_attempt)
+            exit(1)
+
+        for i, reg in enumerate(regulations):
+            if verbose == 1:
+                print(f'Feedback Regulation {i}: {reg} - {reg_types[i]}')
+
+        # each Ap index affects every B -> Bp reaction index
+        for i in range(NA):
+            regulations.append((f'A{i}', f'B{i}'))
+            reg_types.append('up')
+            if verbose == 1:
+                print(f'A to B Stimulation {i+NR}: {f"A{i}"} - {f"B{i}"} - up')
+                
+        stimulator_number = np.random.randint(0, len(B_species)+1)
+        inhibitor_number = len(B_species) - stimulator_number
+        # generate b to c regulations
+        for i in range(stimulator_number):
+            regulations.append((f'B{i}', 'C'))
+            reg_types.append('up')
+            if verbose == 1:
+                print(f'B to C Stimulation {i+NR+NA}: {f"B{i}"} - C - up')
+        for i in range(inhibitor_number):
+            regulations.append((f'B{i}', 'C'))
+            reg_types.append('down')
+            if verbose == 1:
+                print(f'B to C Inhibition {i+NR+NA+stimulator_number}: {f"B{i}"} - C - down')
+
+        self.regulations = regulations
+        self.regulation_types = reg_types
 
     def generate_archtype_and_regulators(self, specie):
 
@@ -162,8 +243,7 @@ class ModelSpecification:
                                                     competitive_inhibitors=total_down_regulations)
 
         # sort the regulators by type, up first and down second
-        regulators_for_specie = sorted(
-            regulators_for_specie, key=lambda x: x[1], reverse=True)
+        regulators_for_specie = sorted(regulators_for_specie, key=lambda x: x[1], reverse=True)
         regulators_sorted = [r[0] for r in regulators_for_specie]
         # regulators_sorted_phos = [r[0]+'p' for r in regulators_for_specie]
         regulators_sorted_modified = []
@@ -193,7 +273,7 @@ class ModelSpecification:
 
         return tuple(r_params)
 
-    def generate_network(self, network_name, mean_range_species, rangeScale_params, rangeMultiplier_params, verbose=1, random_seed=None) -> ModelBuilder:
+    def generate_network_old(self, network_name, mean_range_species, rangeScale_params, rangeMultiplier_params, verbose=1, random_seed=None) -> ModelBuilder:
         
         '''
         Returns a pre-compiled ModelBuilder object with the given specifications, 
@@ -312,9 +392,128 @@ class ModelSpecification:
             
         return model 
     
-    def generate_network_new(self):
-        pass 
+    def generate_network(self, network_name, mean_range_species, rangeScale_params, rangeMultiplier_params, verbose=1, random_seed=None) -> ModelBuilder:
+        '''
+        Returns a pre-compiled ModelBuilder object with the given specifications, 
+        ready to be simulated. Pre-compiled model allows the user to manually set the initial values of the species
+        before compiling to Antimony or SBML. 
+        Parameters:
+            network_name: str, the name of the network
+            mean_range_species: tuple, the range of the mean values for the species
+            rangeScale_params: tuple, the range of the scale values for the parameters
+            rangeMultiplier_params: tuple, the range of the multiplier values for the parameters
+            verbose: int, the verbosity level of the function
+            random_seed: int, the random seed to use for reproducibility
+        '''
+        model = ModelBuilder(network_name)
 
+        # fix np random seed for reproducibility
+        if random_seed is not None:
+            np.random.seed(random_seed)
+        
+        # convert a list of species to a tuple of species
+        B_species_tuple_phos = []
+        for b in self.B_species:
+            b_specie_phos = b + 'p'
+            B_species_tuple_phos.append(b_specie_phos)
+
+        B_species_tuple_phos = tuple(B_species_tuple_phos)
+
+
+        '''A Specie reactions'''
+        for specie in self.A_species:
+
+            # create the rate law for the specie
+            rate_law, regulators = self.generate_archtype_and_regulators(specie)
+
+            # generate a random set of parameters for reaction A -> Ap
+            r_params = michaelis_menten.assume_parameters_values.values()
+            if self.randomise_parameters:
+                r_params = self.generate_random_parameters(michaelis_menten, rangeScale_params, rangeMultiplier_params)
+
+            # add the reaction Ap -> A to the model
+            model.add_reaction(Reaction(michaelis_menten, (specie+'p',), (specie,), parameters_values=tuple(r_params), zero_init=False))
+
+            # generate a random initial value for A
+            random_mean = np.random.randint(mean_range_species[0], mean_range_species[1])
+
+            # generate a random set of parameters for reaction Ap -> A
+            r_params_reverse = rate_law.assume_parameters_values.values()
+            if self.randomise_parameters:
+                r_params_reverse = self.generate_random_parameters(rate_law, rangeScale_params, rangeMultiplier_params)
+
+            # add the reaction Ap -> A to the model
+            model.add_reaction(Reaction(rate_law, (specie,), (specie+'p',),
+                                        reactant_values=random_mean,
+                                        extra_states=regulators,
+                                        parameters_values=tuple(r_params_reverse), zero_init=False))
+
+        '''B Specie reactions'''
+
+        for specie in self.B_species:
+            # create the rate law for the specie
+            rate_law, regulators = self.generate_archtype_and_regulators(specie)
+
+            # generate a random set of parameters for reaction Bp -> B
+            r_params = michaelis_menten.assume_parameters_values.values()
+            if self.randomise_parameters:
+                r_params = self.generate_random_parameters(michaelis_menten, rangeScale_params, rangeMultiplier_params)
+
+            # add the reaction Bp -> B to the model
+            model.add_reaction(Reaction(michaelis_menten, (specie+'p',), (specie,),
+                                        parameters_values=tuple(r_params), zero_init=False))
+
+            # generate a random initial value for B
+            random_mean = np.random.randint(mean_range_species[0], mean_range_species[1])
+
+            # generate a random set of parameters for reaction B -> Bp
+            r_params_reverse = rate_law.assume_parameters_values.values()
+            if self.randomise_parameters:
+                r_params_reverse = self.generate_random_parameters(rate_law, rangeScale_params, rangeMultiplier_params)
+
+            # add the reaction B -> Bp to the model
+            model.add_reaction(Reaction(rate_law, (specie,), (specie+'p',),
+                                        reactant_values=random_mean,
+                                        extra_states=regulators,
+                                        parameters_values=tuple(r_params_reverse), zero_init=False))
+            
+        '''C Specie reactions'''
+        C_specie = 'C'    
+        rate_law, regulators = self.generate_archtype_and_regulators(C_specie)
+        
+        # generate a random set of parameters for reaction C -> Cp, using the rate law
+        c_params = rate_law.assume_parameters_values.values()
+        if self.randomise_parameters:
+            c_params = self.generate_random_parameters(rate_law, rangeScale_params, rangeMultiplier_params)
+            
+        # add the reaction C -> Cp to the model
+        model.add_reaction(Reaction(rate_law, (C_specie,), (C_specie+'p',),
+                                    extra_states=regulators, parameters_values=tuple(c_params), zero_init=False))
+        
+        # generate a random set of parameters for reaction Cp -> C, using the michaelis menten rate law
+        r_params_reverse = michaelis_menten.assume_parameters_values.values()
+        if self.randomise_parameters:
+            r_params_reverse = self.generate_random_parameters(michaelis_menten, rangeScale_params, rangeMultiplier_params)
+            
+        # add the reaction Cp -> C to the model
+        model.add_reaction(Reaction(michaelis_menten, (C_specie+'p',), (C_specie,),
+                                    reactant_values=0, product_values=100,
+                                    parameters_values=tuple(r_params_reverse), zero_init=False))
+        
+        model.precompile()
+        # add stimulation reactions
+        if verbose == 1:
+            print('Model States: ', len(model.states))
+            print('Model Parameters: ', len(model.parameters))
+            print('Model Reactions: ', len(model.reactions))
+            print('\n')
+            print('--- Antimony Model ---')
+            print('\n')
+            print(model.get_antimony_model())
+            print('\n')
+
+        return model
+        
 
 ### Helper functions for generating data
 def manual_reset(runner_model, initial_values):
@@ -660,7 +859,7 @@ def systematic_edge_pruning(old_model_spec: ModelSpecification, old_model: Model
     new_model_spec.regulation_types = regulation_types
     
     # generate a new model with the pruned regulations
-    new_model = new_model_spec.generate_network('sub_'+old_model.name, (0, 100), (0.1, 1), (0.1, 1), verbose=0, random_seed=random_seed)
+    new_model = new_model_spec.generate_network_old('sub_'+old_model.name, (0, 100), (0.1, 1), (0.1, 1), verbose=0, random_seed=random_seed)
     
     # copy the initial values from the old model to the new model    
     new_model = copy_over_params_states(old_model, new_model)

@@ -2,12 +2,21 @@ from models.ModelBuilder import ModelBuilder
 from models.Reaction import Reaction
 from models.ReactionArchtype import ReactionArchtype
 from models.ArchtypeCollections import *
+from dataclasses import dataclass
 
 
 import numpy as np
 import pandas as pd
 from tqdm import tqdm
 from copy import deepcopy
+
+# create a python dataclass called regulation which stores from and to species and the type of regulation
+@dataclass 
+class Regulation:
+    """Class to store the regulation information"""
+    from_specie: str
+    to_specie: str
+    reg_type: str
 
 class ModelSpecification:
 
@@ -514,6 +523,60 @@ class ModelSpecification:
 
         return model
         
+    def get_feedback_regulations(self):
+        
+        '''
+        extracts the feedback regulations from the model regulations
+        '''
+        
+        feedback_regs = []
+        for reg in self.regulations:
+            feedback = True
+            specie_1 = reg[0]
+            specie_2 = reg[1]
+            if 'A' in specie_1:
+                # exact A -> B regulations are not feedback regulations
+                number_1 = int(specie_1[1:])
+                number_2 = int(specie_2[1:])
+                if number_1 == number_2 and 'B' in specie_2:
+                    feedback = False
+            if 'B' in specie_1:
+                # B -> C forward regulations are not feedback regulations
+                if 'C' in specie_2:
+                    feedback = False
+            if 'D' in specie_1:
+                # drug regulations are not feedback regulations
+                feedback = False
+            if feedback:
+                feedback_regs.append(reg)
+        return feedback_regs
+        
+    def remove_regulation(self, reg, reg_type):
+        
+        '''
+        removes a regulation from the model
+        '''
+        
+        if reg in self.regulations:
+            index = self.regulations.index(reg)
+            # check if the regulation type matches
+            if self.regulation_types[index] == reg_type:
+                self.regulations.pop(index)
+                self.regulation_types.pop(index)
+        else: 
+            raise ValueError(f'Regulation {reg} {reg_type} not found in the model spec')
+            
+    def add_regulation(self, reg, reg_type):
+        
+        '''
+        adds a regulation to the model
+        '''
+        
+        if reg not in self.regulations:
+            self.regulations.append(reg)
+            self.regulation_types.append(reg_type)
+        else: 
+            raise ValueError(f'Regulation {reg} already exists in the model spec')
 
 ### Helper functions for generating data
 def manual_reset(runner_model, initial_values):

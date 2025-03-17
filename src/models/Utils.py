@@ -881,6 +881,20 @@ def dynamic_features_method(time_course_data, selected_features=None):
     return new_df
 
 
+def qualitative_features_method(time_course_data, selected_features=None):
+    '''
+    This method identifys the qualitative features of the time course data into specific categories
+        - [feature]_inc: overall increasing trend of a time course, 0 if false and 1 if true
+        - [feature]_dec: overall decreasing trend of a time course, 0 if false and 1 if true
+        - [feature]_rebound: time course decreases below initla value but increases later, 0 if false and 1 if true
+        - [feature]_overshoot: time course increases first above the initial value but decreases  
+    '''
+    if selected_features is None:
+        selected_features = time_course_data.columns
+    else:
+        selected_features = selected_features
+
+
 ### Suboptimal Model Generation Methods 
 
 def specific_pruning(model_spec: ModelSpecification, pruned_regulations):

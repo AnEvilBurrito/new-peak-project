@@ -530,7 +530,7 @@ class ModelSpecification:
         '''
         
         feedback_regs = []
-        for reg in self.regulations:
+        for i, reg in enumerate(self.regulations):
             feedback = True
             specie_1 = reg[0]
             specie_2 = reg[1]
@@ -548,7 +548,7 @@ class ModelSpecification:
                 # drug regulations are not feedback regulations
                 feedback = False
             if feedback:
-                feedback_regs.append(reg)
+                feedback_regs.append((reg, self.regulation_types[i]))
         return feedback_regs
         
     def remove_regulation(self, reg, reg_type):

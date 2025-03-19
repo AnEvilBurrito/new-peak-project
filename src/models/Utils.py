@@ -918,8 +918,9 @@ def systematic_edge_pruning(old_model_spec: ModelSpecification, old_model: Model
     regulations_without_D = [r for r in regulations if 'D' not in r[0]]
     
     assert len(regulations_without_D) > edge_number + 1, "Error in systematic edge pruning: The `number of regulations that is not drug regulations` + 1 to prune must be less than the total number of regulations in the original model specification"
-    
     assert edge_number > 0, "Error in systematic edge pruning: The number of regulations to prune must be greater than 0"
+    
+    reg_deleted = []
 
     i = 0 
     while i < edge_number:
@@ -928,6 +929,7 @@ def systematic_edge_pruning(old_model_spec: ModelSpecification, old_model: Model
         if 'D' in regulations[index][0]: 
             # TODO: this is inefficient, a better method would be to filter D species out of selection 
             continue
+        reg_deleted.append((regulations[index], regulation_types[index]))   
         del regulations[index]
         del regulation_types[index]
         i += 1
@@ -941,7 +943,7 @@ def systematic_edge_pruning(old_model_spec: ModelSpecification, old_model: Model
     # copy the initial values from the old model to the new model    
     new_model = copy_over_params_states(old_model, new_model)
             
-    return new_model_spec, new_model
+    return new_model_spec, new_model, reg_deleted
     
 def copy_over_params_states(old_model: ModelBuilder, new_model: ModelBuilder):
     '''

@@ -967,3 +967,9 @@ def systematic_specie_pruning(old_model_spec: ModelSpecification, old_model: Mod
 
 
 
+class RunnerModel:
+    
+    def __init__(self):
+        self.runner_model = None
+        
+    

@@ -2,7 +2,6 @@
 
 from typing import List, Union, Tuple
 import antimony
-import roadrunner
 import pickle
 import warnings
 
@@ -27,8 +26,6 @@ class ModelBuilder:
         self.variables = {}
         self.enforce_state_values = {}
         self.custom_strings = {}
-
-        self.roadrunner_model: roadrunner.RoadRunner = None # type: roadrunner.RoadRunner
         
     def set_parameter(self, parameter_name: str, value: float):
         '''
@@ -363,34 +360,6 @@ class ModelBuilder:
         '''
         with open(file_name, 'wb') as f:
             pickle.dump(self, f)
-
-    def compile_to_roadrunner(self, sbml_model_str: str) -> roadrunner.RoadRunner:
-
-        roadrunner_model = roadrunner.RoadRunner(sbml_model_str)
-        self.roadrunner_model = roadrunner_model
-        print('Roadrunner model compiled, run self.roadrunner_model.simulate() to simulate')
-
-
-    def get_roadrunner_model(self, sbml_str: str) -> roadrunner.RoadRunner:
-
-        roadrunner_model = roadrunner.RoadRunner(sbml_str)
-        print('Roadrunner model compiled and returned')
-        return roadrunner_model
-
-    
-    # These two functions are testing helpers only, not to use in practice
-    
-
-    def simulate(self, start: float, end: float, step: float):
-        '''
-        Simulates the model using roadrunner and returns the results
-        '''
-
-        roadrunner_model = roadrunner.RoadRunner(self.get_sbml_model())
-        self.r_model = roadrunner_model
-        r_solved = roadrunner_model.simulate(start, end, step)
-        self.r_solved = r_solved
-        return r_solved
 
     def plot(self):
         '''

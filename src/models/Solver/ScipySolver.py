@@ -1,6 +1,7 @@
 from models.Solver.Solver import Solver
 
 import re
+from typing import List, Dict, Any, Tuple
 
 import pandas as pd
 from scipy.integrate import odeint
@@ -78,6 +79,52 @@ class ScipySolver(Solver):
         
         self.last_sim_result = result
         return result
+
+    def set_state_values(self, state_values: Dict[str, float]) -> bool:
+        """
+        Hot swapping of state variables in the running instance of the model, note this is setting the initial values of the state variables.
+        Set the values of state variables in the model instance, this should only possible after compiling the model. 
+        Not every solver will support this, so it is possible that this function to return an not implemented error.
+        returns True if the state variable was set successfully, False otherwise.
+        """
+        # Check if the model is created
+        if self.func is None:
+            raise ValueError("Model instance is not created. Please call compile() first.")
+        
+        # Check if the state values are valid
+        for key in state_values.keys():
+            if key not in self.species:
+                raise ValueError(f"State variable {key} is not valid. Valid state variables are: {self.species}")
+        
+        # Set the state values
+        for key, value in state_values.items():
+            index = self.species.index(key)
+            self.y0[index] = value
+        
+        return True
+
+    def set_parameter_values(self, parameter_values: Dict[str, float]) -> bool:
+        """
+        Hot swapping of parameters in the running instance of the model.
+        Set the values of parameter variables in the model instance, this should only possible after compiling the model. 
+        Not every solver will support this, so it is possible that this function to return an not implemented error.
+        returns True if the state variable was set successfully, False otherwise.
+        """
+        # Check if the model is created
+        if self.func is None:
+            raise ValueError("Model instance is not created. Please call compile() first.")
+        
+        # Check if the parameter values are valid
+        for key in parameter_values.keys():
+            if key not in self.parameters:
+                raise ValueError(f"Parameter {key} is not valid. Valid parameters are: {self.parameters}")
+        
+        # Set the parameter values
+        for key, value in parameter_values.items():
+            index = self.parameters.index(key)
+            self.parameter_values[index] = value
+        
+        return True
         
         
     def _reactions_to_ode_func(self, reactions, species, parameters):
@@ -182,7 +229,7 @@ class ScipySolver(Solver):
             rate = sp.sympify(rate_expr, locals={**species_syms, **param_syms})
 
             if "<->" in reaction_part:
-                raise NotImplementedError("Reversible reactions not yet supported.")
+                raise NotImplementedError("Reversible reactions, in antimony '<->', not yet supported.")
 
             reactants_str, products_str = map(str.strip, reaction_part.split("->"))
             reactants = [r.strip() for r in reactants_str.split("+") if r.strip()]

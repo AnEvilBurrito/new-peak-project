@@ -63,7 +63,7 @@ class ModelBuilder:
             raise Exception(f'State {state_name} not found in the model')
         return self.states[state_name]
 
-    def get_parameters(self):
+    def get_parameters(self) -> dict:
         '''
         Extracts parameters and their values from all reactions 
         in the class and returns a dict while subjecting to a naming rule 
@@ -89,7 +89,7 @@ class ModelBuilder:
 
         return parameters
 
-    def get_state_variables(self):
+    def get_state_variables(self) -> dict:
         '''
         Extracts state variables and their values from all reactions 
         in the class and returns a dict

@@ -17,7 +17,7 @@ from tqdm import tqdm
 from copy import deepcopy
 
 ### Generate feature and target data
-def generate_feature_data(model_spec: ModelSpecification, runner_model, perturbation_type: str, perturbation_params, n, seed=None):
+def generate_feature_data(model_spec: ModelSpecification, initial_values: dict, perturbation_type: str, perturbation_params, n, seed=None):
     '''
     Generate a dataframe of perturbed values for the model
         model_spec: ModelSpecification object   
@@ -44,15 +44,6 @@ def generate_feature_data(model_spec: ModelSpecification, runner_model, perturba
     # set the random seed if provided, for reproducibility
     if seed is not None:
         np.random.seed(seed)
-    
-    # grab the initial values of all A species
-    initial_values = {}
-    for s in model_spec.A_species:
-        initial_values[s] = runner_model.getValue(f'init({s})')
-        # print(s, runner[s])
-
-    for s in model_spec.B_species:
-        initial_values[s] = runner_model.getValue(f'init({s})')
 
     all_perturbed_values = []
     for _ in range(n):
@@ -84,7 +75,7 @@ def generate_feature_data(model_spec: ModelSpecification, runner_model, perturba
     return feature_df
 
 
-def generate_target_data(model_spec, runner_model, feature_df, initial_values, simulation_params={'start': 0, 'end': 500, 'points': 100}):
+def generate_target_data(model_spec: ModelSpecification, solver: Solver, feature_df: pd.DataFrame, simulation_params={'start': 0, 'end': 500, 'points': 100}):
     '''
     Generate the target data for the model
         model_spec: ModelSpecification object   
@@ -108,20 +99,20 @@ def generate_target_data(model_spec, runner_model, feature_df, initial_values, s
 
     for i in range(feature_df.shape[0]):
         # Reset rr model and simulate with each perturbation
-        runner_model.reset()
-        runner_model = manual_reset(runner_model, initial_values)
         perturbed_values = feature_df.iloc[i]
 
-        # set the perturbed values
-        for s in model_spec.A_species:
-            runner_model[f'init({s})'] = perturbed_values[s]
-            
-        for s in model_spec.B_species:
-            runner_model[f'init({s})'] = perturbed_values[s]
+        # convert the perturbed values to a dictionary
+        perturbed_values = perturbed_values.to_dict()
+        
+        # set the perturbed values into solver 
+        solver.set_state_values(perturbed_values)
 
         # simulate the model and grab only the C and Cp values at the end
         start, end, points = simulation_params['start'], simulation_params['end'], simulation_params['points']
-        res = runner_model.simulate(start, end, points)
+        # run the simulation, beauty is not only is the solver abstract, has a nice return dataframe format, but 
+        # most importantly, it is also stateless, meaning that even though we changed the state values,
+        # on the very next call to simulate, it will reset the model to the original state
+        res = solver.simulate(start, end, points) 
         perturbed_results = {}
         for c in model_spec.C_species:
             perturbed_results[f'{c}p'] = res[f'[{c}p]'][-1]
@@ -130,11 +121,10 @@ def generate_target_data(model_spec, runner_model, feature_df, initial_values, s
         # store the run of Cp into time_course_data
         time_course_data.append(res['[Cp]'])
 
-    runner_model = manual_reset(runner_model, initial_values)
     target_df = pd.DataFrame(all_perturbed_results)
     return target_df, time_course_data
 
-def generate_model_timecourse_data(model_spec, runner_model, feature_df, initial_values, simulation_params={'start': 0, 'end': 500, 'points': 100}, capture_species='all'):
+def generate_model_timecourse_data(model_spec: ModelSpecification, solver: Solver, feature_df: pd.DataFrame, simulation_params={'start': 0, 'end': 500, 'points': 100}, capture_species='all'):
     # validate the simulation parameters
     if 'start' not in simulation_params or 'end' not in simulation_params or 'points' not in simulation_params:
         raise ValueError(
@@ -145,22 +135,19 @@ def generate_model_timecourse_data(model_spec, runner_model, feature_df, initial
 
     for i in range(feature_df.shape[0]):
         output = {}
+
         # Reset rr model and simulate with each perturbation
-        runner_model.reset()
-        runner_model = manual_reset(runner_model, initial_values)
         perturbed_values = feature_df.iloc[i]
 
-        # set the perturbed values
-        for s in model_spec.A_species:
-            runner_model[f'init({s})'] = perturbed_values[s]
+        # convert the perturbed values to a dictionary
+        perturbed_values = perturbed_values.to_dict()
 
-        for s in model_spec.B_species:
-            runner_model[f'init({s})'] = perturbed_values[s]
+        # set the perturbed values into solver
+        solver.set_state_values(perturbed_values)
 
         # simulate the model and grab only the C and Cp values at the end
         start, end, points = simulation_params['start'], simulation_params['end'], simulation_params['points']
-        res = runner_model.simulate(start, end, points)
-
+        res = solver.simulate(start, end, points)
         if capture_species == 'all':
             all_species = model_spec.A_species + model_spec.B_species + model_spec.C_species
             for s in all_species:
@@ -174,6 +161,5 @@ def generate_model_timecourse_data(model_spec, runner_model, feature_df, initial
                 output[sp] = res[f'[{sp}]']
         all_outputs.append(output)
 
-    runner_model = manual_reset(runner_model, initial_values)
     output_df = pd.DataFrame(all_outputs)
     return output_df

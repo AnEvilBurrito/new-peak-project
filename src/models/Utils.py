@@ -2,9 +2,6 @@ from models.ModelBuilder import ModelBuilder
 from models.Reaction import Reaction
 from models.ReactionArchtype import ReactionArchtype
 from models.ArchtypeCollections import *
-from models.Solver.Solver import Solver
-from models.Solver.ScipySolver import ScipySolver
-from models.Solver.RoadrunnerSolver import RoadrunnerSolver
 from dataclasses import dataclass
 
 
@@ -928,6 +925,7 @@ def systematic_edge_pruning(old_model_spec: ModelSpecification, old_model: Model
     while i < edge_number:
         # randomly select an index to remove
         index = np.random.randint(0, len(regulations))
+        # do not remove drug regulations
         if 'D' in regulations[index][0]: 
             # TODO: this is inefficient, a better method would be to filter D species out of selection 
             continue

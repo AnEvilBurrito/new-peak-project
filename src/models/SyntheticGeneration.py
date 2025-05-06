@@ -1,0 +1,179 @@
+# contains scripts to generate synthetic data
+
+from models.ModelBuilder import ModelBuilder
+from models.Reaction import Reaction
+from models.ReactionArchtype import ReactionArchtype
+from models.ArchtypeCollections import *
+from models.Solver.Solver import Solver
+from models.Solver.ScipySolver import ScipySolver
+from models.Solver.RoadrunnerSolver import RoadrunnerSolver
+from models.Utils import ModelSpecification
+from dataclasses import dataclass
+
+
+import numpy as np
+import pandas as pd
+from tqdm import tqdm
+from copy import deepcopy
+
+### Generate feature and target data
+def generate_feature_data(model_spec: ModelSpecification, runner_model, perturbation_type: str, perturbation_params, n, seed=None):
+    '''
+    Generate a dataframe of perturbed values for the model
+        model_spec: ModelSpecification object   
+        model: roadrunner model object
+        perturbation_type: str, the type of perturbation to apply, either 'uniform' or 'gaussian'
+        perturbation_params: dict of parameters for the perturbation, for
+            'uniform' perturbation, the params are {'min': float, 'max': float}
+            'gaussian' perturbation, the param is either {'std': float} or {'rsd': float}
+                'rsd' is the relative standard deviation of the perturbation, i.e. std/mean
+        n: int, the number of perturbations to generate
+    ''' 
+    # validate parameters
+    if perturbation_type not in ['uniform', 'gaussian']:
+        raise ValueError('Perturbation type must be either "uniform" or "gaussian"')
+    
+    if perturbation_type == 'uniform':
+        if 'min' not in perturbation_params or 'max' not in perturbation_params:
+            raise ValueError('For uniform perturbation, the parameters must contain "min" and "max" keys')
+    elif perturbation_type == 'gaussian':
+        # either 'std' or 'rsd' must be in the parameters
+        if 'std' not in perturbation_params and 'rsd' not in perturbation_params:
+            raise ValueError('For gaussian perturbation, the parameters must contain "std" or "rsd" keys')
+    
+    # set the random seed if provided, for reproducibility
+    if seed is not None:
+        np.random.seed(seed)
+    
+    # grab the initial values of all A species
+    initial_values = {}
+    for s in model_spec.A_species:
+        initial_values[s] = runner_model.getValue(f'init({s})')
+        # print(s, runner[s])
+
+    for s in model_spec.B_species:
+        initial_values[s] = runner_model.getValue(f'init({s})')
+
+    all_perturbed_values = []
+    for _ in range(n):
+        perturbed_values = {}
+        if perturbation_type == 'uniform':
+            min_ = perturbation_params['min']
+            max_ = perturbation_params['max']  
+            for s in model_spec.A_species:
+                perturbed_values[s] = initial_values[s] * np.random.uniform(min_, max_)
+            for s in model_spec.B_species:
+                perturbed_values[s] = initial_values[s] * np.random.uniform(min_, max_)
+            all_perturbed_values.append(perturbed_values)
+        elif perturbation_type == 'gaussian':
+            if 'std' in perturbation_params:
+                sigma = perturbation_params['std']
+            elif 'rsd' in perturbation_params:
+                rsd = perturbation_params['rsd']
+                sigma = rsd * initial_values[s]
+            for s in model_spec.A_species:
+                mu = initial_values[s]
+                perturbed_values[s] = np.random.normal(mu, sigma)
+            for s in model_spec.B_species:
+                mu = initial_values[s]
+                perturbed_values[s] = np.random.normal(mu, sigma)
+            all_perturbed_values.append(perturbed_values)
+        
+    # put the perturbed values into a dataframe
+    feature_df = pd.DataFrame(all_perturbed_values)
+    return feature_df
+
+
+def generate_target_data(model_spec, runner_model, feature_df, initial_values, simulation_params={'start': 0, 'end': 500, 'points': 100}):
+    '''
+    Generate the target data for the model
+        model_spec: ModelSpecification object   
+        model: roadrunner model object
+        feature_df: dataframe of perturbed values
+        simulation_params: dict of parameters for the simulation, for
+            'start': float, the start time of the simulation
+            'end': float, the end time of the simulation
+            'points': int, the number of points to simulate
+    Returns:
+        target_df: dataframe of the target values
+        time_course_data: list of the time course data for each perturbation
+    '''
+    # validate the simulation parameters
+    if 'start' not in simulation_params or 'end' not in simulation_params or 'points' not in simulation_params:
+        raise ValueError('Simulation parameters must contain "start", "end" and "points" keys')
+    
+    # iterate the dataframe and simulate each perturbation
+    all_perturbed_results = []
+    time_course_data = []
+
+    for i in range(feature_df.shape[0]):
+        # Reset rr model and simulate with each perturbation
+        runner_model.reset()
+        runner_model = manual_reset(runner_model, initial_values)
+        perturbed_values = feature_df.iloc[i]
+
+        # set the perturbed values
+        for s in model_spec.A_species:
+            runner_model[f'init({s})'] = perturbed_values[s]
+            
+        for s in model_spec.B_species:
+            runner_model[f'init({s})'] = perturbed_values[s]
+
+        # simulate the model and grab only the C and Cp values at the end
+        start, end, points = simulation_params['start'], simulation_params['end'], simulation_params['points']
+        res = runner_model.simulate(start, end, points)
+        perturbed_results = {}
+        for c in model_spec.C_species:
+            perturbed_results[f'{c}p'] = res[f'[{c}p]'][-1]
+        all_perturbed_results.append(perturbed_results)
+        
+        # store the run of Cp into time_course_data
+        time_course_data.append(res['[Cp]'])
+
+    runner_model = manual_reset(runner_model, initial_values)
+    target_df = pd.DataFrame(all_perturbed_results)
+    return target_df, time_course_data
+
+def generate_model_timecourse_data(model_spec, runner_model, feature_df, initial_values, simulation_params={'start': 0, 'end': 500, 'points': 100}, capture_species='all'):
+    # validate the simulation parameters
+    if 'start' not in simulation_params or 'end' not in simulation_params or 'points' not in simulation_params:
+        raise ValueError(
+            'Simulation parameters must contain "start", "end" and "points" keys')
+
+    # iterate the dataframe and simulate each perturbation
+    all_outputs = []
+
+    for i in range(feature_df.shape[0]):
+        output = {}
+        # Reset rr model and simulate with each perturbation
+        runner_model.reset()
+        runner_model = manual_reset(runner_model, initial_values)
+        perturbed_values = feature_df.iloc[i]
+
+        # set the perturbed values
+        for s in model_spec.A_species:
+            runner_model[f'init({s})'] = perturbed_values[s]
+
+        for s in model_spec.B_species:
+            runner_model[f'init({s})'] = perturbed_values[s]
+
+        # simulate the model and grab only the C and Cp values at the end
+        start, end, points = simulation_params['start'], simulation_params['end'], simulation_params['points']
+        res = runner_model.simulate(start, end, points)
+
+        if capture_species == 'all':
+            all_species = model_spec.A_species + model_spec.B_species + model_spec.C_species
+            for s in all_species:
+                output[s] = res[f'[{s}]']
+                sp = s + 'p'
+                output[sp] = res[f'[{sp}]']
+        else:
+            for s in capture_species:
+                output[s] = res[f'[{s}]']
+                sp = s + 'p'
+                output[sp] = res[f'[{sp}]']
+        all_outputs.append(output)
+
+    runner_model = manual_reset(runner_model, initial_values)
+    output_df = pd.DataFrame(all_outputs)
+    return output_df

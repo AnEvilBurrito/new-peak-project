@@ -36,6 +36,7 @@ class Solver(ABC):
     
     def set_state_values(self, state_values: Dict[str, float]) -> bool:
         """
+        Hot swapping of state variables in the running instance of the model.
         Set the values of state variables in the model instance, this should only possible after compiling the model. 
         Not every solver will support this, so it is possible that this function to return an not implemented error.
         returns True if the state variable was set successfully, False otherwise.
@@ -44,6 +45,7 @@ class Solver(ABC):
      
     def set_parameter_values(self, parameter_values: Dict[str, float]) -> bool:
         """
+        Hot swapping of parameters in the running instance of the model.
         Set the values of parameter variables in the model instance, this should only possible after compiling the model. 
         Not every solver will support this, so it is possible that this function to return an not implemented error.
         returns True if the state variable was set successfully, False otherwise.

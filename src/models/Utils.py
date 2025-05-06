@@ -2,6 +2,9 @@ from models.ModelBuilder import ModelBuilder
 from models.Reaction import Reaction
 from models.ReactionArchtype import ReactionArchtype
 from models.ArchtypeCollections import *
+from models.Solver.Solver import Solver
+from models.Solver.ScipySolver import ScipySolver
+from models.Solver.RoadrunnerSolver import RoadrunnerSolver
 from dataclasses import dataclass
 
 
@@ -691,7 +694,6 @@ def generate_feature_data(model_spec: ModelSpecification, runner_model, perturba
     return feature_df
 
 
-
 def generate_target_data(model_spec, runner_model, feature_df, initial_values, simulation_params={'start': 0, 'end': 500, 'points': 100}):
     '''
     Generate the target data for the model
@@ -964,12 +966,5 @@ def systematic_specie_pruning(old_model_spec: ModelSpecification, old_model: Mod
     Prune the model by removing `specie_number` number of species from the model_spec randomly. The remaining model will have at least one specie in A and B which are connected by a regulation, and one specie in C.
     '''
     pass
-
-
-
-class RunnerModel:
-    
-    def __init__(self):
-        self.runner_model = None
         
     

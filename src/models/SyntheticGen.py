@@ -113,15 +113,14 @@ def generate_target_data(model_spec: ModelSpecification, solver: Solver, feature
         # most importantly, it is also stateless, meaning that even though we changed the state values,
         # on the very next call to simulate, it will reset the model to the original state
         res = solver.simulate(start, end, points) 
-        perturbed_results = {}
-        for c in model_spec.C_species:
-            perturbed_results[f'{c}p'] = res[f'[{c}p]'][-1]
-        all_perturbed_results.append(perturbed_results)
+        # locate the Cp value in the dataframe
+        Cp = res['Cp'].iloc[-1]
+        all_perturbed_results.append(Cp)
         
         # store the run of Cp into time_course_data
-        time_course_data.append(res['[Cp]'])
+        time_course_data.append(res['Cp'].values) 
 
-    target_df = pd.DataFrame(all_perturbed_results)
+    target_df = pd.DataFrame(all_perturbed_results, columns=['Cp'])
     return target_df, time_course_data
 
 def generate_model_timecourse_data(model_spec: ModelSpecification, solver: Solver, feature_df: pd.DataFrame, simulation_params={'start': 0, 'end': 500, 'points': 100}, capture_species='all'):
@@ -151,14 +150,14 @@ def generate_model_timecourse_data(model_spec: ModelSpecification, solver: Solve
         if capture_species == 'all':
             all_species = model_spec.A_species + model_spec.B_species + model_spec.C_species
             for s in all_species:
-                output[s] = res[f'[{s}]']
+                output[s] = res[s].values
                 sp = s + 'p'
-                output[sp] = res[f'[{sp}]']
+                output[sp] = res[sp].values
         else:
             for s in capture_species:
-                output[s] = res[f'[{s}]']
+                output[s] = res[s].values
                 sp = s + 'p'
-                output[sp] = res[f'[{sp}]']
+                output[sp] = res[sp].values
         all_outputs.append(output)
 
     output_df = pd.DataFrame(all_outputs)

@@ -38,11 +38,7 @@ class ModelSpecification:
                 f'B Species: {self.B_species}\n' + \
                 f'C Species: {self.C_species}\n' + \
                 f'Regulations: {self.regulations}\n' + \
-                f'Regulation Types: {self.regulation_types}\n' + \
-                f'C Weak Stimulators: {self.C_weak_stimulators}\n' + \
-                f'C Strong Stimulators: {self.C_strong_stimulators}\n' + \
-                f'C Allosteric Inhibitors: {self.C_allosteric_inhibitors}\n' + \
-                f'C Competitive Inhibitors: {self.C_competitive_inhibitors}\n'
+                f'Regulation Types: {self.regulation_types}\n'
 
     def generate_specifications_old(self, random_seed, NA, NR, verbose=1):
         # WARNING: This method is deprecated and should not be used
@@ -522,6 +518,17 @@ class ModelSpecification:
             print('\n')
 
         return model
+    
+    def get_regulations(self):
+        '''
+        extracts the regulations and their types from the model, as lists of tuples
+        '''
+        regulations = []
+        for i, reg in enumerate(self.regulations):
+            regulation = (reg[0], reg[1])
+            regulation_type = self.regulation_types[i]
+            regulations.append((regulation, regulation_type))
+        return regulations
         
     def get_feedback_regulations(self):
         

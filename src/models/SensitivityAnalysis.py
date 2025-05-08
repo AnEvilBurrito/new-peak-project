@@ -8,7 +8,7 @@ import numpy as np
 def sensitivity_analysis(builder: ModelBuilder, solver: Solver, specie_name: str, specie_range: tuple, simulation_time: float, simulation_step: int):
     all_results = []
     for specie in specie_range:
-        solver.set_state_values({specie_name: np.float(specie)})
+        solver.set_state_values({specie_name: np.float64(specie)})
         try: 
             res = solver.simulate(0, simulation_time, simulation_step)
             all_results.append(res)

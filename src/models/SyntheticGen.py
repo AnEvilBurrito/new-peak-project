@@ -28,6 +28,7 @@ def generate_feature_data(model_spec: ModelSpecification, initial_values: dict, 
             'gaussian' perturbation, the param is either {'std': float} or {'rsd': float}
                 'rsd' is the relative standard deviation of the perturbation, i.e. std/mean
         n: int, the number of perturbations to generate
+        TODO: add parallel processing for the simulation
     ''' 
     # validate parameters
     if perturbation_type not in ['uniform', 'gaussian']:

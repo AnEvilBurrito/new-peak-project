@@ -9,6 +9,7 @@ import numpy as np
 import pandas as pd
 from tqdm import tqdm
 from copy import deepcopy
+from joblib import Parallel, delayed
 
 # create a python dataclass called regulation which stores from and to species and the type of regulation
 @dataclass 
@@ -862,24 +863,38 @@ def get_dynamic_features(col_data: pd.Series,
     return dynamic_features
 
 
-def dynamic_features_method(time_course_data, selected_features=None):
+def dynamic_features_method(time_course_data, selected_features=None, n_cores=1):
     if selected_features is None:
         selected_features = time_course_data.columns
     else:
         selected_features = selected_features
-        
-    all_dynamic_features = []
-    # iterate each row in the time course data
-    for i in tqdm(range(time_course_data.shape[0])):
+    
+    # use parallel processing to speed up the calculation with tqdm
+    def process_data(row_data):
         row_dynamic_features = []
-        row_data = time_course_data.iloc[i]
         for feature in selected_features:
             col_data = row_data[feature]
             # convert to pd Series for easier manipulation
             col_data = pd.Series(col_data)
             dyn_feats = get_dynamic_features(col_data)
             row_dynamic_features.extend(dyn_feats)
-        all_dynamic_features.append(row_dynamic_features)
+        return row_dynamic_features
+    
+    if n_cores > 1:
+        all_dynamic_features = Parallel(n_jobs=n_cores)(delayed(process_data)(time_course_data.iloc[i]) for i in tqdm(range(time_course_data.shape[0])))
+    else:
+        all_dynamic_features = []
+        # iterate each row in the time course data
+        for i in tqdm(range(time_course_data.shape[0])):
+            row_dynamic_features = []
+            row_data = time_course_data.iloc[i]
+            for feature in selected_features:
+                col_data = row_data[feature]
+                # convert to pd Series for easier manipulation
+                col_data = pd.Series(col_data)
+                dyn_feats = get_dynamic_features(col_data)
+                row_dynamic_features.extend(dyn_feats)
+            all_dynamic_features.append(row_dynamic_features)
 
     dynamic_feature_label = ['auc', 'median', 'tfc', 'tmax', 'max', 'tmin', 'min', 'ttsv', 'tsv', 'init']    
     new_df = pd.DataFrame(all_dynamic_features, columns=[s + '_' + dynamic_feature for s in selected_features for dynamic_feature in dynamic_feature_label], index=time_course_data.index)

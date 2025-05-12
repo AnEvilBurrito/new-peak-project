@@ -15,6 +15,7 @@ import numpy as np
 import pandas as pd
 from tqdm import tqdm
 from copy import deepcopy
+from joblib import Parallel, delayed
 
 ### Generate feature and target data
 def generate_feature_data(model_spec: ModelSpecification, initial_values: dict, perturbation_type: str, perturbation_params, n, seed=None):
@@ -76,7 +77,7 @@ def generate_feature_data(model_spec: ModelSpecification, initial_values: dict, 
     return feature_df
 
 
-def generate_target_data(model_spec: ModelSpecification, solver: Solver, feature_df: pd.DataFrame, simulation_params={'start': 0, 'end': 500, 'points': 100}):
+def generate_target_data(model_spec: ModelSpecification, solver: Solver, feature_df: pd.DataFrame, simulation_params={'start': 0, 'end': 500, 'points': 100}, n_cores=1):
     '''
     Generate the target data for the model
         model_spec: ModelSpecification object   
@@ -97,8 +98,8 @@ def generate_target_data(model_spec: ModelSpecification, solver: Solver, feature
     # iterate the dataframe and simulate each perturbation
     all_perturbed_results = []
     time_course_data = []
-
-    for i in range(feature_df.shape[0]):
+    
+    def simulate_perturbation(i):
         # Reset rr model and simulate with each perturbation
         perturbed_values = feature_df.iloc[i]
 
@@ -116,26 +117,53 @@ def generate_target_data(model_spec: ModelSpecification, solver: Solver, feature
         res = solver.simulate(start, end, points) 
         # locate the Cp value in the dataframe
         Cp = res['Cp'].iloc[-1]
-        all_perturbed_results.append(Cp)
-        
-        # store the run of Cp into time_course_data
-        time_course_data.append(res['Cp'].values) 
+        time_course = res['Cp'].values
+        return Cp, time_course
+    
+    # use parallel processing to speed up the simulation
+    if n_cores > 1:
+        results = Parallel(n_jobs=n_cores)(delayed(simulate_perturbation)(i) for i in tqdm(range(feature_df.shape[0])))
+        all_perturbed_results, time_course_data = zip(*results)
+        all_perturbed_results = list(all_perturbed_results)
+        time_course_data = list(time_course_data)
+    else:
+        # iterate the dataframe and simulate each perturbation
+        all_perturbed_results = []
+        time_course_data = []
+        # iterate the dataframe and simulate each perturbation
+        for i in tqdm(range(feature_df.shape[0])):
+            # Reset rr model and simulate with each perturbation
+            perturbed_values = feature_df.iloc[i]
 
+            # convert the perturbed values to a dictionary
+            perturbed_values = perturbed_values.to_dict()
+            
+            # set the perturbed values into solver 
+            solver.set_state_values(perturbed_values)
+
+            # simulate the model and grab only the C and Cp values at the end
+            start, end, points = simulation_params['start'], simulation_params['end'], simulation_params['points']
+            # run the simulation, beauty is not only is the solver abstract, has a nice return dataframe format, but 
+            # most importantly, it is also stateless, meaning that even though we changed the state values,
+            # on the very next call to simulate, it will reset the model to the original state
+            res = solver.simulate(start, end, points) 
+            # locate the Cp value in the dataframe
+            Cp = res['Cp'].iloc[-1]
+            all_perturbed_results.append(Cp)
+            
+            # store the run of Cp into time_course_data
+            time_course_data.append(res['Cp'].values)
+            
     target_df = pd.DataFrame(all_perturbed_results, columns=['Cp'])
     return target_df, time_course_data
 
-def generate_model_timecourse_data(model_spec: ModelSpecification, solver: Solver, feature_df: pd.DataFrame, simulation_params={'start': 0, 'end': 500, 'points': 100}, capture_species='all'):
+def generate_model_timecourse_data(model_spec: ModelSpecification, solver: Solver, feature_df: pd.DataFrame, simulation_params={'start': 0, 'end': 500, 'points': 100}, capture_species='all', n_cores=1):
     # validate the simulation parameters
     if 'start' not in simulation_params or 'end' not in simulation_params or 'points' not in simulation_params:
         raise ValueError(
             'Simulation parameters must contain "start", "end" and "points" keys')
 
-    # iterate the dataframe and simulate each perturbation
-    all_outputs = []
-
-    for i in range(feature_df.shape[0]):
-        output = {}
-
+    def simulate_perturbation(i):
         # Reset rr model and simulate with each perturbation
         perturbed_values = feature_df.iloc[i]
 
@@ -148,6 +176,7 @@ def generate_model_timecourse_data(model_spec: ModelSpecification, solver: Solve
         # simulate the model and grab only the C and Cp values at the end
         start, end, points = simulation_params['start'], simulation_params['end'], simulation_params['points']
         res = solver.simulate(start, end, points)
+        output = {}
         if capture_species == 'all':
             all_species = model_spec.A_species + model_spec.B_species + model_spec.C_species
             for s in all_species:
@@ -159,7 +188,43 @@ def generate_model_timecourse_data(model_spec: ModelSpecification, solver: Solve
                 output[s] = res[s].values
                 sp = s + 'p'
                 output[sp] = res[sp].values
-        all_outputs.append(output)
+        return output
+
+    # use parallel processing to speed up the simulation
+    if n_cores > 1:
+        results = Parallel(n_jobs=n_cores)(delayed(simulate_perturbation)(i) for i in tqdm(range(feature_df.shape[0])))
+        all_outputs = list(results)
+    else:
+        # iterate the dataframe and simulate each perturbation
+        all_outputs = []
+        # iterate the dataframe and simulate each perturbation
+        for i in tqdm(range(feature_df.shape[0])):
+            output = {}
+
+            # Reset rr model and simulate with each perturbation
+            perturbed_values = feature_df.iloc[i]
+
+            # convert the perturbed values to a dictionary
+            perturbed_values = perturbed_values.to_dict()
+
+            # set the perturbed values into solver
+            solver.set_state_values(perturbed_values)
+
+            # simulate the model and grab only the C and Cp values at the end
+            start, end, points = simulation_params['start'], simulation_params['end'], simulation_params['points']
+            res = solver.simulate(start, end, points)
+            if capture_species == 'all':
+                all_species = model_spec.A_species + model_spec.B_species + model_spec.C_species
+                for s in all_species:
+                    output[s] = res[s].values
+                    sp = s + 'p'
+                    output[sp] = res[sp].values
+            else:
+                for s in capture_species:
+                    output[s] = res[s].values
+                    sp = s + 'p'
+                    output[sp] = res[sp].values
+            all_outputs.append(output)
 
     output_df = pd.DataFrame(all_outputs)
     return output_df

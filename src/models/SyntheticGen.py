@@ -77,7 +77,7 @@ def generate_feature_data(model_spec: ModelSpecification, initial_values: dict, 
     return feature_df
 
 
-def generate_target_data(model_spec: ModelSpecification, solver: Solver, feature_df: pd.DataFrame, simulation_params={'start': 0, 'end': 500, 'points': 100}, n_cores=1):
+def generate_target_data(model_spec: ModelSpecification, solver: Solver, feature_df: pd.DataFrame, simulation_params={'start': 0, 'end': 500, 'points': 100}, n_cores=1, verbose=False):
     '''
     Generate the target data for the model
         model_spec: ModelSpecification object   
@@ -122,7 +122,7 @@ def generate_target_data(model_spec: ModelSpecification, solver: Solver, feature
     
     # use parallel processing to speed up the simulation
     if n_cores > 1:
-        results = Parallel(n_jobs=n_cores)(delayed(simulate_perturbation)(i) for i in tqdm(range(feature_df.shape[0])))
+        results = Parallel(n_jobs=n_cores)(delayed(simulate_perturbation)(i) for i in tqdm(range(feature_df.shape[0]), desc='Simulating perturbations', disable=not verbose))
         all_perturbed_results, time_course_data = zip(*results)
         all_perturbed_results = list(all_perturbed_results)
         time_course_data = list(time_course_data)
@@ -131,7 +131,7 @@ def generate_target_data(model_spec: ModelSpecification, solver: Solver, feature
         all_perturbed_results = []
         time_course_data = []
         # iterate the dataframe and simulate each perturbation
-        for i in tqdm(range(feature_df.shape[0])):
+        for i in tqdm(range(feature_df.shape[0]), desc='Simulating perturbations', disable=not verbose):
             # Reset rr model and simulate with each perturbation
             perturbed_values = feature_df.iloc[i]
 
@@ -157,7 +157,7 @@ def generate_target_data(model_spec: ModelSpecification, solver: Solver, feature
     target_df = pd.DataFrame(all_perturbed_results, columns=['Cp'])
     return target_df, time_course_data
 
-def generate_model_timecourse_data(model_spec: ModelSpecification, solver: Solver, feature_df: pd.DataFrame, simulation_params={'start': 0, 'end': 500, 'points': 100}, capture_species='all', n_cores=1):
+def generate_model_timecourse_data(model_spec: ModelSpecification, solver: Solver, feature_df: pd.DataFrame, simulation_params={'start': 0, 'end': 500, 'points': 100}, capture_species='all', n_cores=1, verbose=False):
     # validate the simulation parameters
     if 'start' not in simulation_params or 'end' not in simulation_params or 'points' not in simulation_params:
         raise ValueError(
@@ -192,13 +192,13 @@ def generate_model_timecourse_data(model_spec: ModelSpecification, solver: Solve
 
     # use parallel processing to speed up the simulation
     if n_cores > 1:
-        results = Parallel(n_jobs=n_cores)(delayed(simulate_perturbation)(i) for i in tqdm(range(feature_df.shape[0])))
+        results = Parallel(n_jobs=n_cores)(delayed(simulate_perturbation)(i) for i in tqdm(range(feature_df.shape[0]), desc='Simulating perturbations', disable=not verbose))
         all_outputs = list(results)
     else:
         # iterate the dataframe and simulate each perturbation
         all_outputs = []
         # iterate the dataframe and simulate each perturbation
-        for i in tqdm(range(feature_df.shape[0])):
+        for i in tqdm(range(feature_df.shape[0]), desc='Simulating perturbations', disable=not verbose):
             output = {}
 
             # Reset rr model and simulate with each perturbation

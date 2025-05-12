@@ -1,0 +1,23 @@
+[project]
+name = "new-peak-project"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "antimony>=2.15.0",
+    "ipykernel>=6.29.5",
+    "joblib>=1.5.0",
+    "libroadrunner>=2.8.0",
+    "matplotlib>=3.10.3",
+    "numba>=0.61.2",
+    "pandas>=2.2.3",
+    "pip>=25.1.1",
+    "python-dotenv>=1.1.0",
+    "python-libsbml>=5.20.5",
+    "scikit-learn>=1.6.1",
+    "scipy>=1.15.3",
+    "seaborn>=0.13.2",
+    "sympy>=1.14.0",
+    "tqdm>=4.67.1",
+]

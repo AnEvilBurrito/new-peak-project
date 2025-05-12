@@ -10,3 +10,4 @@ tqdm
 seaborn
 matplotlib
 joblib
+ipykernel

@@ -10,12 +10,88 @@ from models.Solver.RoadrunnerSolver import RoadrunnerSolver
 from models.Utils import ModelSpecification
 from dataclasses import dataclass
 
+from scipy.stats import qmc
 
 import numpy as np
 import pandas as pd
 from tqdm import tqdm
 from copy import deepcopy
 from joblib import Parallel, delayed
+
+def lhs(n_samples, n_features, random_state=None):
+    """Latin Hypercube Sampling in [0,1]^d"""
+    result = np.empty((n_samples, n_features))
+    rng = np.random.default_rng(random_state)
+    for i in range(n_features):
+        cut = np.linspace(0, 1, n_samples + 1)
+        u = rng.uniform(size=n_samples)
+        points = cut[:-1] + u * (cut[1] - cut[0])
+        rng.shuffle(points)
+        result[:, i] = points
+    return result
+
+
+def generate_feature_data_v2(model_spec: ModelSpecification, initial_values: dict, perturbation_type: str, perturbation_params, n, seed=None):
+    '''
+    Generate a dataframe of perturbed values for the model, version 2, supports lhs sampling
+        model_spec: ModelSpecification object
+        initial_values: dict, the initial values of the model
+        perturbation_type: str, the type of perturbation to apply, either 'uniform', 'gaussian', or 'lhs'
+        perturbation_params: dict of parameters for the perturbation, for
+            'lhs' perturbation, the params are {'min': float, 'max': float} - lhs is latin hypercube sampling
+            'uniform' perturbation, the params are {'min': float, 'max': float}
+            'gaussian' perturbation, the param is either {'std': float} or {'rsd': float}
+                'rsd' is the relative standard deviation of the perturbation, i.e. std/mean
+        n: int, the number of perturbations to generate
+        seed: int, the random seed to use for reproducibility
+    Returns:
+        feature_df: dataframe of the perturbed values
+    '''
+    if perturbation_type not in ['uniform', 'gaussian', 'lhs']:
+        raise ValueError('Perturbation type must be "uniform", "gaussian", or "lhs"')
+
+    if perturbation_type in ['uniform', 'lhs']:
+        if 'min' not in perturbation_params or 'max' not in perturbation_params:
+            raise ValueError('For uniform/lhs perturbation, parameters must contain "min" and "max"')
+    elif perturbation_type == 'gaussian':
+        if 'std' not in perturbation_params and 'rsd' not in perturbation_params:
+            raise ValueError('For gaussian perturbation, parameters must contain "std" or "rsd"')
+
+    all_species = model_spec.A_species + model_spec.B_species
+
+    if perturbation_type == 'lhs':
+        min_ = perturbation_params['min']
+        max_ = perturbation_params['max']
+
+        # Initialize LHS sampler
+        sampler = qmc.LatinHypercube(d=len(all_species), seed=seed)
+        lhs_samples = sampler.random(n=n)
+
+        # Scale to [min_, max_] across all dimensions
+        scaled_samples = qmc.scale(lhs_samples, [min_] * len(all_species), [max_] * len(all_species))
+
+        # Build dataframe
+        feature_df = pd.DataFrame(scaled_samples, columns=all_species)
+        return feature_df
+
+    # For uniform and gaussian sampling
+    all_perturbed_values = []
+    for _ in range(n):
+        perturbed_values = {}
+        if perturbation_type == 'uniform':
+            min_ = perturbation_params['min']
+            max_ = perturbation_params['max']
+            for s in all_species:
+                perturbed_values[s] = initial_values[s] * np.random.uniform(min_, max_)
+        elif perturbation_type == 'gaussian':
+            for s in all_species:
+                mu = initial_values[s]
+                sigma = perturbation_params.get('std', perturbation_params.get('rsd', 0) * mu)
+                perturbed_values[s] = np.random.normal(mu, sigma)
+        all_perturbed_values.append(perturbed_values)
+
+    feature_df = pd.DataFrame(all_perturbed_values)
+    return feature_df
 
 ### Generate feature and target data
 def generate_feature_data(model_spec: ModelSpecification, initial_values: dict, perturbation_type: str, perturbation_params, n, seed=None):
@@ -25,11 +101,11 @@ def generate_feature_data(model_spec: ModelSpecification, initial_values: dict, 
         model: roadrunner model object
         perturbation_type: str, the type of perturbation to apply, either 'uniform' or 'gaussian'
         perturbation_params: dict of parameters for the perturbation, for
+            'lhs' perturbation, the params are {'min': float, 'max': float} - lhs is latin hypercube sampling
             'uniform' perturbation, the params are {'min': float, 'max': float}
             'gaussian' perturbation, the param is either {'std': float} or {'rsd': float}
                 'rsd' is the relative standard deviation of the perturbation, i.e. std/mean
         n: int, the number of perturbations to generate
-        TODO: add parallel processing for the simulation
     ''' 
     # validate parameters
     if perturbation_type not in ['uniform', 'gaussian']:
@@ -48,8 +124,29 @@ def generate_feature_data(model_spec: ModelSpecification, initial_values: dict, 
         np.random.seed(seed)
 
     all_perturbed_values = []
+    all_species = model_spec.A_species + model_spec.B_species
+    # if lhs is selected, generate the samples and scale them
+    if perturbation_type == 'lhs':
+        min_ = perturbation_params['min']
+        max_ = perturbation_params['max']
+        # Generate LHS samples and scale
+        n_features = len(all_species)
+        lhs_samples = lhs(n_samples=n, n_features=n_features)
+        scaled_samples = min_ + lhs_samples * (max_ - min_)
+        feature_df = pd.DataFrame(scaled_samples, columns=all_species)
+        return feature_df
+    
     for _ in range(n):
         perturbed_values = {}
+        if perturbation_type == 'lhs':
+            # generate a latin hypercube sample
+            min_ = perturbation_params['min']
+            max_ = perturbation_params['max']
+            for s in model_spec.A_species:
+                perturbed_values[s] = np.random.uniform(min_, max_)
+            for s in model_spec.B_species:
+                perturbed_values[s] = np.random.uniform(min_, max_)
+            all_perturbed_values.append(perturbed_values)
         if perturbation_type == 'uniform':
             min_ = perturbation_params['min']
             max_ = perturbation_params['max']  

@@ -22,6 +22,7 @@ class ScipySolver(Solver):
         self.parameters = None
         self.y0 = None
         self.parameter_values = None
+        self.assignment_rules = None
         self.func = None
         self.jit = False
         
@@ -29,56 +30,102 @@ class ScipySolver(Solver):
         
     def compile(self, compile_str: str, **kwargs) -> None:
         """
-        Takes an antimony string and use existing functions to set up the scipy ODE solver.
+        Compile the model from an Antimony string and generate ODE function.
+        Assignment rule variables are treated like pseudo-parameters with
+        time-based value changes during simulation.
         """
-        # Parse the antimony string to extract reactions, species, parameters, y0, and parameter_values
-        reactions, species, parameters, y0, parameter_values = self._parse_antimony_model(compile_str)
+        result = self._parse_antimony_model(compile_str)
+        reactions, species, parameters, y0, parameter_values, assignment_rules = result
+
         self.reactions = reactions
         self.species = species
-        self.parameters = parameters
+        self.assignment_rules = assignment_rules
+
+        # Extend parameters with assignment rule variables
+        self.assignment_rule_vars = sorted(assignment_rules.keys())
+        self.parameters = parameters            # already includes rule vars
+        self.parameter_values = parameter_values  
         self.y0 = y0
-        self.parameter_values = parameter_values
-        
-        # depending on the keyword argument 'jit' being True, we will use the jit version to compile the function 
-        # if keyword argument 'jit' is not provided, we will use the default version
-        jit = kwargs.get('jit', False)
-        if not jit:
-            self.func = self._reactions_to_ode_func(self.reactions, self.species, self.parameters)
+
+        self.jit = kwargs.get("jit", False)
+        if not self.jit:
+            self.func = self._reactions_to_ode_func(
+                reactions, species, self.parameters, assignment_rule_vars=self.assignment_rule_vars
+            )
         else:
-            # if jit is True, we will use the jit version to compile the function
-            self.func = self._reactions_to_jit_ode_func(self.reactions, self.species, self.parameters)
-            self.jit = True
-        
+            self.func = self._reactions_to_jit_ode_func(
+                reactions, species, self.parameters, assignment_rule_vars=self.assignment_rule_vars
+            )
+    
         
     def simulate(self, start: float, stop: float, step: float) -> pd.DataFrame:
         """
-        Simulate the problem from start to stop with a given step size.
-        Returns a pandas dataframe with the results with the following columns:
-        - time: time points of the simulation
-        - [species]: species names
-        with each row corresponds to a time point and each column corresponds to a species.
+        Simulate the ODE system from start to stop with a given step size.
+        Handles piecewise assignment rule changes at change-points.
         """
-        
-        # Check if the model is created
         if self.func is None:
             raise ValueError("Model instance is not created. Please call compile() first.")
-        
-        t = np.linspace(start, stop, step)
-        if self.jit:
-            def ode_wrapper(y, t, *args):
-                params = np.array(args)
-                return self.func(y, t, params)
-            
-            sol = odeint(ode_wrapper, self.y0, t, args=tuple(self.parameter_values))
-        else: 
-            sol = odeint(self.func, self.y0, t, args=tuple(self.parameter_values))
 
-        # set up the result dataframe
-        result = pd.DataFrame(sol, columns=self.species)
-        result.insert(0, 'time', t)
-        
-        self.last_sim_result = result
-        return result
+        # Generate full time vector and extract rule breakpoints
+        t_full = np.linspace(start, stop, step)
+        change_points = sorted(
+            {rule["time"] for rule in self.assignment_rules.values() if start < rule["time"] < stop}
+        )
+        time_segments = [start] + change_points + [stop]
+
+        all_results = []
+        y_current = np.array(self.y0, dtype=float)
+        param_current = list(self.parameter_values)
+        param_map = {p: i for i, p in enumerate(self.parameters)}
+
+        for i in range(len(time_segments) - 1):
+            t0, t1 = time_segments[i], time_segments[i + 1]
+            mask = (t_full >= t0) & (t_full <= t1)
+            t_segment = np.unique(t_full[mask])  # Remove duplicate times
+
+            if len(t_segment) < 2:
+                continue  # Skip short segments
+
+            # Safety checks
+            if not np.all(np.isfinite(y_current)):
+                raise ValueError(f"Non-finite state values before integrating [{t0}, {t1}]: {y_current}")
+            if not np.all(np.isfinite(param_current)):
+                raise ValueError(f"Non-finite parameter values before integrating [{t0}, {t1}]: {param_current}")
+
+            try:
+                if self.jit:
+                    def ode_wrapper(y, t, *args):
+                        return self.func(y, t, np.array(args))
+                    sol = odeint(ode_wrapper, y_current, t_segment, args=tuple(param_current))
+                else:
+                    sol = odeint(self.func, y_current, t_segment, args=tuple(param_current))
+            except Exception as e:
+                raise RuntimeError(f"ODE integration failed between t={t0} and t={t1}: {e}")
+
+            # Store segment result
+            df_segment = pd.DataFrame(sol, columns=self.species)
+            df_segment.insert(0, "time", t_segment)
+            all_results.append(df_segment)
+
+            # Update state for next segment
+            y_current = sol[-1]
+
+            # Apply assignment rule changes at t1
+            for var, rule in self.assignment_rules.items():
+                if np.isclose(rule["time"], t1):
+                    idx = param_map.get(var)
+                    if idx is None:
+                        raise KeyError(f"Assignment rule targets unknown parameter '{var}'")
+                    param_current[idx] = rule["after"]
+                    # Optional debug log:
+                    # print(f"At t={t1}, setting {var} = {rule['after']}")
+
+        final_result = pd.concat(all_results, ignore_index=True)
+        self.last_sim_result = final_result
+        return final_result
+
+
+
 
     def set_state_values(self, state_values: Dict[str, float]) -> bool:
         """
@@ -126,61 +173,28 @@ class ScipySolver(Solver):
         
         return True
         
-        
-    def _reactions_to_ode_func(self, reactions, species, parameters):
-        """
-        Convert a list of reactions to an ODE function using sympy.
-        reactions: list of strings, each string is a reaction in the format "A + B -> C + D; rate_expr"
-        species: list of strings, each string is a species name
-        parameters: list of strings, each string is a parameter name
-        """
-        # Create symbols for species and parameters
-        species_syms = {s: sp.Symbol(s) for s in species}
-        param_syms = {p: sp.Symbol(p) for p in parameters}
-        
-        # Initialize derivative expressions
-        derivs = {s: 0 for s in species}
-
-        for rxn in reactions:
-            # Format: "A + B -> C + D; rate_expr"
-            reaction_part, rate_expr = map(str.strip, rxn.split(";"))
-            rate = sp.sympify(rate_expr, locals={**species_syms, **param_syms})
-            
-            if "<->" in reaction_part:
-                raise NotImplementedError("Reversible reactions not yet supported.")
-            reactants_str, products_str = map(str.strip, reaction_part.split("->"))
-            reactants = [r.strip() for r in reactants_str.split("+") if r.strip()]
-            products = [p.strip() for p in products_str.split("+") if p.strip()]
-            
-            # Update derivatives
-            for r in reactants:
-                derivs[r] -= rate
-            for p in products:
-                derivs[p] += rate
-
-        # Convert expressions to list in species order
-        dydt_exprs = [derivs[s] for s in species]
-        
-        # Lambdify
-        dydt_func = sp.lambdify((list(species_syms.values()), list(param_syms.values())), dydt_exprs, modules="numpy")
-
-        # Define final ODE function
-        def func(y, t, *params):
-            return np.array(dydt_func(y, params)).flatten()
-
-        return func
     
-    def _parse_antimony_model(self, antimony_str):
+    def _parse_antimony_model(self, antimony_str: str) -> Tuple[
+        List[str], List[str], List[str], List[float], List[float], Dict[str, Dict[str, float]]
+    ]:
+        """
+        Parses an Antimony model string and extracts:
+        - reactions
+        - species
+        - parameters
+        - initial conditions (y0)
+        - parameter values
+        - assignment rules as dicts of {var: {'before': val, 'after': val, 'time': t}}
+        """
         reactions = []
         species_set = set()
         species_dict = {}
         parameter_dict = {}
+        assignment_rules = {}
 
         for line in antimony_str.splitlines():
             line = line.strip()
-            if not line or line.startswith("#"):
-                continue
-            if line.startswith("model ") or line == "end":
+            if not line or line.startswith("#") or line.startswith("model ") or line == "end":
                 continue
 
             # Reaction line
@@ -189,7 +203,6 @@ class ScipySolver(Solver):
                 rxn = rxn.strip()
                 reactions.append(rxn)
 
-                # Capture species from reaction components
                 reaction_part, _ = map(str.strip, rxn.split(";"))
                 if "->" in reaction_part:
                     lhs, rhs = map(str.strip, reaction_part.split("->"))
@@ -197,39 +210,74 @@ class ScipySolver(Solver):
                     products = [s.strip() for s in rhs.split("+")]
                     species_set.update(reactants + products)
 
-            # Variable assignment
+            # Assignment rule
+            elif ":=" in line:
+                var, expr = map(str.strip, line.split(":=", 1))
+                rule = self._parse_piecewise_rule(expr)
+                if rule:
+                    assignment_rules[var] = rule
+
+            # Initial value
             elif "=" in line:
                 var, val = map(str.strip, line.split("=", 1))
                 try:
                     val = float(val)
+                    if var in species_set:
+                        species_dict[var] = val
+                    else:
+                        parameter_dict[var] = val
                 except ValueError:
-                    continue
+                    continue  # skip non-numeric initial values
 
-                if var in species_set:
-                    species_dict[var] = val
-                else:
-                    parameter_dict[var] = val
-
-        species = sorted(species_dict.keys())
-        parameters = sorted(parameter_dict.keys())
+        species = sorted(species_dict)
         y0 = [species_dict[s] for s in species]
+        parameters = sorted(parameter_dict)
         parameter_values = [parameter_dict[p] for p in parameters]
 
-        return reactions, species, parameters, y0, parameter_values
+        # Treat assignment rule names as "pseudo-parameters"
+        parameters += sorted(assignment_rules.keys())
+        parameter_values += [rule['before'] for rule in assignment_rules.values()]
+        return reactions, species, parameters, y0, parameter_values, assignment_rules
+
+
+    def _parse_piecewise_rule(self, expr: str) -> Dict[str, float] | None:
+        """
+        Parses simple piecewise expressions like:
+        'piecewise(0, time < 500, 500)' → {'before': 0.0, 'after': 500.0, 'time': 500.0}
+        """
+        match = re.match(r"piecewise\(([^,]+),\s*time\s*<\s*([0-9.]+),\s*([^)]+)\)", expr)
+        if match:
+            val1, time_str, val2 = match.groups()
+            try:
+                return {
+                    "before": float(val1),
+                    "after": float(val2),
+                    "time": float(time_str)
+                }
+            except ValueError:
+                return None
+        return None
+
     
-    def _reactions_to_jit_ode_func(self, reactions, species, parameters):
-        # Create symbolic variables
+    def _reactions_to_ode_func(self, reactions, species, parameters, assignment_rule_vars=None):
+        """
+        Convert a list of reactions to an ODE function using sympy.
+        Supports symbolic variables for both parameters and assignment rules.
+        """
         species_syms = {s: sp.Symbol(s) for s in species}
         param_syms = {p: sp.Symbol(p) for p in parameters}
+        rule_syms = {r: sp.Symbol(r) for r in assignment_rule_vars or []}
+
+        all_syms = {**species_syms, **param_syms, **rule_syms}
 
         derivs = {s: 0 for s in species}
 
         for rxn in reactions:
             reaction_part, rate_expr = map(str.strip, rxn.split(";"))
-            rate = sp.sympify(rate_expr, locals={**species_syms, **param_syms})
+            rate = sp.sympify(rate_expr, locals=all_syms)
 
             if "<->" in reaction_part:
-                raise NotImplementedError("Reversible reactions, in antimony '<->', not yet supported.")
+                raise NotImplementedError("Reversible reactions not yet supported.")
 
             reactants_str, products_str = map(str.strip, reaction_part.split("->"))
             reactants = [r.strip() for r in reactants_str.split("+") if r.strip()]
@@ -242,7 +290,50 @@ class ScipySolver(Solver):
 
         dydt_exprs = [derivs[s] for s in species]
 
-        # Substitutions
+        # 🟢 Correct: single flat argument list
+        all_inputs = list(species_syms.values()) + list(param_syms.values())
+        dydt_func = sp.lambdify(all_inputs, dydt_exprs, modules="numpy")
+
+        def func(y, t, *params):
+            return np.array(dydt_func(*y, *params)).flatten()
+
+        return func
+
+
+
+
+    def _reactions_to_jit_ode_func(self, reactions, species, parameters, assignment_rule_vars=None):
+        """
+        Create a Numba-compiled ODE function that supports assignment rules as parameters.
+        """
+        # Create symbols
+        species_syms = {s: sp.Symbol(s) for s in species}
+        param_syms = {p: sp.Symbol(p) for p in parameters}
+        rule_syms = {r: sp.Symbol(r) for r in assignment_rule_vars or []}
+        all_syms = {**species_syms, **param_syms, **rule_syms}
+
+        # Derivative dictionary
+        derivs = {s: 0 for s in species}
+
+        for rxn in reactions:
+            reaction_part, rate_expr = map(str.strip, rxn.split(";"))
+            rate = sp.sympify(rate_expr, locals=all_syms)
+
+            if "<->" in reaction_part:
+                raise NotImplementedError("Reversible reactions not yet supported.")
+
+            reactants_str, products_str = map(str.strip, reaction_part.split("->"))
+            reactants = [r.strip() for r in reactants_str.split("+") if r.strip()]
+            products = [p.strip() for p in products_str.split("+") if p.strip()]
+
+            for r in reactants:
+                derivs[r] -= rate
+            for p in products:
+                derivs[p] += rate
+
+        dydt_exprs = [derivs[s] for s in species]
+
+        # Generate symbolic subs
         species_subs = {species_syms[s]: sp.Symbol(f"y[{i}]") for i, s in enumerate(species)}
         param_subs = {param_syms[p]: sp.Symbol(f"params[{i}]") for i, p in enumerate(parameters)}
 
@@ -262,5 +353,4 @@ class ScipySolver(Solver):
         exec(func_code, local_vars)
         generated_func = local_vars["generated_func"]
 
-        # Compile with Numba
         return njit(generated_func)

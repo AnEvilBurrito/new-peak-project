@@ -230,7 +230,8 @@ def generate_target_data_diff_spec(model_builds: list[ModelBuilder],
         return Cp, time_course
 
     # use parallel processing to speed up the simulation
-    if n_cores > 1:
+    if n_cores > 1 or n_cores == -1:
+        # if n_cores is -1, use all available cores
         results = Parallel(n_jobs=n_cores)(delayed(simulate_perturbation)(i) for i in tqdm(range(feature_df.shape[0]), desc='Simulating perturbations', disable=not verbose))
         all_perturbed_results, time_course_data = zip(*results)
         all_perturbed_results = list(all_perturbed_results)
@@ -300,7 +301,7 @@ def generate_target_data_diff_build(model_spec: ModelSpecification,
         return Cp, time_course
 
     # use parallel processing to speed up the simulation
-    if n_cores > 1:
+    if n_cores > 1 or n_cores == -1:
         results = Parallel(n_jobs=n_cores)(delayed(simulate_perturbation)(i) for i in tqdm(range(feature_df.shape[0]), desc='Simulating perturbations', disable=not verbose))
         all_perturbed_results, time_course_data = zip(*results)
         all_perturbed_results = list(all_perturbed_results)
@@ -365,7 +366,7 @@ def generate_target_data(model_spec: ModelSpecification, solver: Solver, feature
         return Cp, time_course
     
     # use parallel processing to speed up the simulation
-    if n_cores > 1:
+    if n_cores > 1 or n_cores == -1:
         results = Parallel(n_jobs=n_cores)(delayed(simulate_perturbation)(i) for i in tqdm(range(feature_df.shape[0]), desc='Simulating perturbations', disable=not verbose))
         all_perturbed_results, time_course_data = zip(*results)
         all_perturbed_results = list(all_perturbed_results)
@@ -400,6 +401,82 @@ def generate_target_data(model_spec: ModelSpecification, solver: Solver, feature
             
     target_df = pd.DataFrame(all_perturbed_results, columns=['Cp'])
     return target_df, time_course_data
+
+
+def generate_model_timecourse_data_diff_spec(model_builds: list[ModelBuilder], SolverClass: type[Solver], feature_df: pd.DataFrame, simulation_params={'start': 0, 'end': 500, 'points': 100}, capture_species='all', n_cores=1, verbose=False):
+    '''
+    Generate the time course data for the model, using different model specifications
+        model_builds: list of ModelBuilder objects, each object contains a different model specification
+        solver: Solver object, either ScipySolver or RoadrunnerSolver
+        feature_df: dataframe of perturbed values
+        simulation_params: dict of parameters for the simulation, for
+            'start': float, the start time of the simulation
+            'end': float, the end time of the simulation
+            'points': int, the number of points to simulate
+        capture_species: str or list of str, species to capture in the output, if 'all', captures all species
+    Returns:
+        output_df: dataframe of the time course data for each perturbation
+    '''
+    # validate the simulation parameters
+    if 'start' not in simulation_params or 'end' not in simulation_params or 'points' not in simulation_params:
+        raise ValueError('Simulation parameters must contain "start", "end" and "points" keys')
+    
+    def simulate_perturbation(i):
+        # Reset rr model and simulate with each perturbation
+        perturbed_values = feature_df.iloc[i]
+        # get the model build for this iteration
+        model_build = model_builds[i]
+        # convert the perturbed values to a dictionary
+        perturbed_values = perturbed_values.to_dict()
+        solver = SolverClass()
+        sbml_str = model_build.get_sbml_model()
+        ant_str = model_build.get_antimony_model()
+        # check the instance of the solver, if it is RoadrunnerSolver, load the sbml model
+        if isinstance(solver, RoadrunnerSolver):
+            solver.compile(sbml_str)
+        elif isinstance(solver, ScipySolver):
+            # if it is ScipySolver, load the antimony model
+            solver.compile(ant_str)
+        else:
+            raise ValueError('For generate_model_timecourse_data_diff_spec, Solver must be either ScipySolver or RoadrunnerSolver')
+
+        
+        # set the perturbed values into solver 
+        solver.set_state_values(perturbed_values)
+
+        # simulate the model and grab only the C and Cp values at the end
+        start, end, points = simulation_params['start'], simulation_params['end'], simulation_params['points']
+        res = solver.simulate(start, end, points)
+        output = {}
+        if capture_species == 'all':
+            all_species = model_build.A_species + model_build.B_species + model_build.C_species
+            for s in all_species:
+                output[s] = res[s].values
+                sp = s + 'p'
+                output[sp] = res[sp].values
+        else:
+            for s in capture_species:
+                output[s] = res[s].values
+                sp = s + 'p'
+                output[sp] = res[sp].values
+        return output
+    # use parallel processing to speed up the simulation
+    if n_cores > 1 or n_cores == -1:
+        results = Parallel(n_jobs=n_cores)(delayed(simulate_perturbation)(i) for i in tqdm(range(feature_df.shape[0]), desc='Simulating perturbations', disable=not verbose))
+        all_outputs = list(results)
+    else:
+        # iterate the dataframe and simulate each perturbation
+        all_outputs = []
+        # iterate the dataframe and simulate each perturbation
+        for i in tqdm(range(feature_df.shape[0]), desc='Simulating perturbations', disable=not verbose):
+            output = simulate_perturbation(i)
+            all_outputs.append(output)
+    output_df = pd.DataFrame(all_outputs)
+    # if the output_df is empty, return an empty dataframe
+    if output_df.empty:
+        raise ValueError('Output dataframe is empty, check the model specifications and feature dataframe')
+    # if the output_df is not empty, return the output_df
+    return output_df
 
 
 def generate_model_timecourse_data_diff_build(model_spec: ModelSpecification, solver: Solver, feature_df: pd.DataFrame, parameter_set: list[dict], simulation_params={'start': 0, 'end': 500, 'points': 100}, capture_species='all', n_cores=1, verbose=False):
@@ -452,7 +529,7 @@ def generate_model_timecourse_data_diff_build(model_spec: ModelSpecification, so
         return output
 
     # use parallel processing to speed up the simulation
-    if n_cores > 1:
+    if n_cores > 1 or n_cores == -1:
         results = Parallel(n_jobs=n_cores)(delayed(simulate_perturbation)(i) for i in tqdm(range(feature_df.shape[0]), desc='Simulating perturbations', disable=not verbose))
         all_outputs = list(results)
     else:
@@ -500,7 +577,7 @@ def generate_model_timecourse_data(model_spec: ModelSpecification, solver: Solve
         return output
 
     # use parallel processing to speed up the simulation
-    if n_cores > 1:
+    if n_cores > 1 or n_cores == -1:
         results = Parallel(n_jobs=n_cores)(delayed(simulate_perturbation)(i) for i in tqdm(range(feature_df.shape[0]), desc='Simulating perturbations', disable=not verbose))
         all_outputs = list(results)
     else:

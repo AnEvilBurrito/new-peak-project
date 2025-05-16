@@ -880,7 +880,7 @@ def dynamic_features_method(time_course_data, selected_features=None, n_cores=1,
             row_dynamic_features.extend(dyn_feats)
         return row_dynamic_features
     
-    if n_cores > 1:
+    if n_cores > 1 or n_cores == -1:
         all_dynamic_features = Parallel(n_jobs=n_cores)(delayed(process_data)(time_course_data.iloc[i]) for i in tqdm(range(time_course_data.shape[0]), desc="Calculating dynamic features", disable=verbose==0))
     else:
         all_dynamic_features = []

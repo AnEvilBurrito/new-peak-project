@@ -146,7 +146,7 @@ class ModelSpecification:
         # systematically generate C specie regulations insead of defining varialbles for each type of regulation
         random_seed_number = random_seed  # None if do not want to fix the seed
         if random_seed_number is not None:
-            np.random.seed(random_seed_number)
+            rng = np.random.default_rng(random_seed_number)
             
         if verbose == 1:
             print('--- Generating a random network ---')
@@ -179,8 +179,8 @@ class ModelSpecification:
         max_attempt = len(B_and_C)**2 * 100
         current_attempt = 0
         while len(regulations) < NR and current_attempt < max_attempt:
-            from_specie = np.random.choice(B_and_C)
-            to_specie = np.random.choice(all_species)
+            from_specie = str(rng.choice(B_and_C))
+            to_specie = str(rng.choice(all_species))
             reg = (from_specie, to_specie)
             reverse_reg = (to_specie, from_specie)
 
@@ -189,7 +189,7 @@ class ModelSpecification:
                 continue
 
             if reg not in regulations and reverse_reg not in regulations:
-                reg_type = np.random.choice(regulation_types_choice)
+                reg_type = str(rng.choice(regulation_types_choice))
                 regulations.append(reg)
                 reg_types.append(reg_type)
 
@@ -209,7 +209,7 @@ class ModelSpecification:
             if verbose == 1:
                 print(f'A to B Stimulation {i+NR}: {f"A{i}"} - {f"B{i}"} - up')
                 
-        stimulator_number = np.random.randint(0, len(B_species)+1)
+        stimulator_number = rng.integers(0, len(B_species)+1)
         inhibitor_number = len(B_species) - stimulator_number
         # generate b to c regulations
         for i in range(stimulator_number):
@@ -267,14 +267,14 @@ class ModelSpecification:
     # generate random parameters informed by a scale
     def generate_random_parameters(self, reaction_archtype: ReactionArchtype, scale_range, multiplier_range, random_seed=None):
         if random_seed is not None:
-            np.random.seed(random_seed)
+            rng = np.random.default_rng(random_seed)
 
         assumed_values = reaction_archtype.assume_parameters_values
         # print(f'Assumed values: {assumed_values}')
         r_params = []
         for key, value in assumed_values.items():
-            rand = np.random.uniform(value*scale_range[0], value*scale_range[1])
-            rand *= np.random.uniform(multiplier_range[0], multiplier_range[1])
+            rand = rng.uniform(value*scale_range[0], value*scale_range[1])
+            rand *= rng.uniform(multiplier_range[0], multiplier_range[1])
             r_params.append(rand)
 
         return tuple(r_params)
@@ -415,7 +415,7 @@ class ModelSpecification:
 
         # fix np random seed for reproducibility
         if random_seed is not None:
-            np.random.seed(random_seed)
+            rng = np.random.default_rng(random_seed)
         
         # convert a list of species to a tuple of species
         B_species_tuple_phos = []
@@ -435,18 +435,18 @@ class ModelSpecification:
             # generate a random set of parameters for reaction A -> Ap
             r_params = michaelis_menten.assume_parameters_values.values()
             if self.randomise_parameters:
-                r_params = self.generate_random_parameters(michaelis_menten, rangeScale_params, rangeMultiplier_params)
+                r_params = self.generate_random_parameters(michaelis_menten, rangeScale_params, rangeMultiplier_params, random_seed=random_seed)
 
             # add the reaction Ap -> A to the model
             model.add_reaction(Reaction(michaelis_menten, (specie+'p',), (specie,), parameters_values=tuple(r_params), zero_init=False))
 
             # generate a random initial value for A
-            random_mean = np.random.randint(mean_range_species[0], mean_range_species[1])
+            random_mean = rng.integers(mean_range_species[0], mean_range_species[1])
 
             # generate a random set of parameters for reaction Ap -> A
             r_params_reverse = rate_law.assume_parameters_values.values()
             if self.randomise_parameters:
-                r_params_reverse = self.generate_random_parameters(rate_law, rangeScale_params, rangeMultiplier_params)
+                r_params_reverse = self.generate_random_parameters(rate_law, rangeScale_params, rangeMultiplier_params, random_seed=random_seed)
 
             # add the reaction Ap -> A to the model
             model.add_reaction(Reaction(rate_law, (specie,), (specie+'p',),
@@ -463,19 +463,19 @@ class ModelSpecification:
             # generate a random set of parameters for reaction Bp -> B
             r_params = michaelis_menten.assume_parameters_values.values()
             if self.randomise_parameters:
-                r_params = self.generate_random_parameters(michaelis_menten, rangeScale_params, rangeMultiplier_params)
+                r_params = self.generate_random_parameters(michaelis_menten, rangeScale_params, rangeMultiplier_params, random_seed=random_seed)
 
             # add the reaction Bp -> B to the model
             model.add_reaction(Reaction(michaelis_menten, (specie+'p',), (specie,),
                                         parameters_values=tuple(r_params), zero_init=False))
 
             # generate a random initial value for B
-            random_mean = np.random.randint(mean_range_species[0], mean_range_species[1])
+            random_mean = rng.integers(mean_range_species[0], mean_range_species[1])
 
             # generate a random set of parameters for reaction B -> Bp
             r_params_reverse = rate_law.assume_parameters_values.values()
             if self.randomise_parameters:
-                r_params_reverse = self.generate_random_parameters(rate_law, rangeScale_params, rangeMultiplier_params)
+                r_params_reverse = self.generate_random_parameters(rate_law, rangeScale_params, rangeMultiplier_params, random_seed=random_seed)
 
             # add the reaction B -> Bp to the model
             model.add_reaction(Reaction(rate_law, (specie,), (specie+'p',),
@@ -490,7 +490,7 @@ class ModelSpecification:
         # generate a random set of parameters for reaction C -> Cp, using the rate law
         c_params = rate_law.assume_parameters_values.values()
         if self.randomise_parameters:
-            c_params = self.generate_random_parameters(rate_law, rangeScale_params, rangeMultiplier_params)
+            c_params = self.generate_random_parameters(rate_law, rangeScale_params, rangeMultiplier_params, random_seed=random_seed)
             
         # add the reaction C -> Cp to the model
         model.add_reaction(Reaction(rate_law, (C_specie,), (C_specie+'p',),
@@ -499,7 +499,7 @@ class ModelSpecification:
         # generate a random set of parameters for reaction Cp -> C, using the michaelis menten rate law
         r_params_reverse = michaelis_menten.assume_parameters_values.values()
         if self.randomise_parameters:
-            r_params_reverse = self.generate_random_parameters(michaelis_menten, rangeScale_params, rangeMultiplier_params)
+            r_params_reverse = self.generate_random_parameters(michaelis_menten, rangeScale_params, rangeMultiplier_params, random_seed=random_seed)
             
         # add the reaction Cp -> C to the model
         model.add_reaction(Reaction(michaelis_menten, (C_specie+'p',), (C_specie,),
@@ -801,7 +801,7 @@ def last_time_point_method(time_course_data, selected_species = None):
     else:
         selected_species = selected_species
     selected_time_course_data = time_course_data[selected_species]
-    last_time_points = selected_time_course_data.applymap(lambda x: x[-1])
+    last_time_points = selected_time_course_data.map(lambda x: x[-1])
     return last_time_points
 
 def get_dynamic_features(col_data: pd.Series, 

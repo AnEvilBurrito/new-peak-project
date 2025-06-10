@@ -218,7 +218,7 @@ class ModelSpecification:
             if verbose == 1:
                 print(f'B to C Stimulation {i+NR+NA}: {f"B{i}"} - C - up')
         for i in range(inhibitor_number):
-            regulations.append((f'B{i}', 'C'))
+            regulations.append((f'B{stimulator_number+i}', 'C'))
             reg_types.append('down')
             if verbose == 1:
                 print(f'B to C Inhibition {i+NR+NA+stimulator_number}: {f"B{i}"} - C - down')

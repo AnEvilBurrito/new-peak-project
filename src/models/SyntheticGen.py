@@ -312,10 +312,13 @@ def generate_target_data_diff_build(model_spec: ModelSpecification,
         time_course_data = []
         # iterate the dataframe and simulate each perturbation
         for i in tqdm(range(feature_df.shape[0]), desc='Simulating perturbations', disable=not verbose):
-            Cp, time_course = simulate_perturbation(i)
-            all_perturbed_results.append(Cp)
-            # store the run of Cp into time_course_data
-            time_course_data.append(time_course)
+            try: 
+                Cp, time_course = simulate_perturbation(i)
+                all_perturbed_results.append(Cp)
+                # store the run of Cp into time_course_data
+                time_course_data.append(time_course)
+            except Exception as e:
+                print(f'Error simulating perturbation {i}: {e}')
             
     target_df = pd.DataFrame(all_perturbed_results, columns=['Cp'])
     return target_df, time_course_data
@@ -449,11 +452,9 @@ def generate_model_timecourse_data_diff_spec(model_builds: list[ModelBuilder], S
         res = solver.simulate(start, end, points)
         output = {}
         if capture_species == 'all':
-            all_species = model_build.A_species + model_build.B_species + model_build.C_species
+            all_species = model_build.get_state_variables().keys()
             for s in all_species:
                 output[s] = res[s].values
-                sp = s + 'p'
-                output[sp] = res[sp].values
         else:
             for s in capture_species:
                 output[s] = res[s].values
@@ -469,8 +470,11 @@ def generate_model_timecourse_data_diff_spec(model_builds: list[ModelBuilder], S
         all_outputs = []
         # iterate the dataframe and simulate each perturbation
         for i in tqdm(range(feature_df.shape[0]), desc='Simulating perturbations', disable=not verbose):
-            output = simulate_perturbation(i)
-            all_outputs.append(output)
+            try:
+                output = simulate_perturbation(i)
+                all_outputs.append(output)
+            except Exception as e:
+                print(f'Error simulating perturbation {i}: {e}')
     output_df = pd.DataFrame(all_outputs)
     # if the output_df is empty, return an empty dataframe
     if output_df.empty:
@@ -537,8 +541,11 @@ def generate_model_timecourse_data_diff_build(model_spec: ModelSpecification, so
         all_outputs = []
         # iterate the dataframe and simulate each perturbation
         for i in tqdm(range(feature_df.shape[0]), desc='Simulating perturbations', disable=not verbose):
-            output = simulate_perturbation(i)
-            all_outputs.append(output)
+            try:
+                output = simulate_perturbation(i)
+                all_outputs.append(output)
+            except Exception as e:
+                print(f'Error simulating perturbation {i}: {e}')
 
     output_df = pd.DataFrame(all_outputs)
     return output_df

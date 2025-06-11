@@ -1,0 +1,456 @@
+********** MODEL NAME
+FGFR4 - RTK signaling network
+revision: 2a
+
+
+********** MODEL NOTES
+update date: 26/10/2022
+
+new mechanisms added:
+ERK --> mTORC1 (via TSC1/2)
+S6K1 --| mTORC2
+mTORC2 --> AKT
+
+% drug reaction formulated by a hill equation (FGFR4i and PI3Ki)
+% drug reaction formulated by a MM equation (AKTi, MEKi, ERBBi)
+
+new inhibitors
+ERBBi
+AKTi
+MEKi
+
+
+********** MODEL STATE INFORMATION
+IGFR(0) = 7.58                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       
+pIGFR(0) = 0                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       
+
+FGFR4(0) = 962.77                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       
+pFGFR4(0) = 0                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       
+
+ERBB(0) = 680.21                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       
+pERBB(0) = 0 
+    
+IRS(0) = 13.04                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       
+pIRS(0) = 0 
+
+PI3K(0) = 2.72                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   
+aPI3K(0) = 0     
+
+PIP2(0) = 5000                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   
+PIP3(0) = 0                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   
+   
+FRS2(0) = 20.54                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   
+pFRS2(0) = 0 
+
+Grb2(0) = 6436.64
+aGrb2(0) = 0
+
+Akt(0) = 653.74                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     
+pAkt(0) = 0 
+
+PDK1(0) = 39.24
+aPDK1(0) = 0
+
+mTORC1(0) = 13.17
+amTORC1(0) = 0
+
+S6K(0) = 41.10                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     
+pS6K(0) = 0 
+           
+Sos(0) = 3.70
+aSos(0) =0
+
+Shp2(0) = 270.39
+aShp2(0) = 0
+
+Ras(0) = 1813.21
+aRas(0) = 0
+      
+Raf(0) = 27.49
+aRaf(0) = 0
+
+MEK(0) = 1997.80
+pMEK(0) = 0
+
+ERK(0) = 2054.40                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   
+pERK(0) = 0
+
+GAB1(0) = 20.03                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   
+aGAB1(0) = 0      
+
+GAB2(0) = 4.26                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   
+aGAB2(0) = 0
+
+mSPRY2(0) = 0
+SPRY2(0) = 0
+pSPRY2(0) = 0
+
+
+mPTP(0) = 0                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    
+PTP(0) = 0 
+
+Cbl(0) = 5.43                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    
+aCbl(0) = 0 
+
+FOXO(0) = 1025
+pFOXO(0) = 1025
+
+mTORC2(0) = 13.17
+amTORC2(0) = 0
+
+
+********** MODEL PARAMETERS
+
+
+kc01f = 0.01
+Vm01r = 0.01
+ki01r = 1
+
+kc02f = 0.01
+Ki02f = 1 % FGFR4i
+Vm02r = 0.01
+ki02r1 = 0.1
+ki02r2 = 0.1
+
+kc03f = 0.01
+Vm03r = 0.01
+ki03r = 0.1
+
+kc04f = 0.01
+ki04f = 1
+Vm04r = 0.1
+
+kc05f1 = 0.01
+kc05f2 = 0.01
+kc05f3 = 0.01
+Vm05r = 0.1
+
+kc06f = 0.01
+Ki06f = 1
+kc06r = 0.1
+
+kc07f = 0.01
+Vm07r = 0.01
+
+kc08f = 0.01
+Vm08r = 0.01
+
+kc09f = 0.01
+Vm09r = 0.01
+
+kc10f = 0.01
+Vm10r = 0.01
+
+kc11f = 0.01
+ki11f = 0.1
+ki11r = 0.1
+Vm11r = 0.01
+
+kc12f1 = 0.01
+kc12f2 = 0.01
+kc12f3 = 0.01
+ki12f = 0.1
+Vm12r = 0.01
+
+kc13f = 0.01
+Vm13r = 0.01
+
+kc14f1 = 0.01
+kc14f2 = 0.01
+Vm14r = 0.01
+
+kc15f1 = 0.01
+kc15f2 = 0.01
+ki15f = 0.01
+Vm15r = 0.01
+
+kc16f = 0.01
+ki16f1 = 0.1
+ki16f2 = 0.1
+Vm16r = 0.1
+
+kc17f = 0.01
+Vm17r = 0.01
+
+kc18f = 0.01
+Vm18r = 0.01
+
+kc19f = 0.01
+alpha19f = 0.1
+ki19f = 0.1
+Vm19r = 0.01
+
+kc20f = 0.01
+alpha20f = 0.1
+ki20f1 = 0.1
+ki20f2 = 0.1
+Vm20r = 0.01
+
+vs21 = 0.01
+kc21 = 0.1
+Km21 = 1
+
+kc23 = 0.01
+Km23 = 1
+
+kc24 = 0.1
+
+kc25f = 0.01
+kc25r = 0.01
+
+kc26 = 0.1
+
+vs27 = 0.01
+kc27a = 0.1
+Km27a = 1
+kc27b = 0.01
+Km27b = 1
+
+kc29 = 0.1
+Km29 = 1
+
+kc31f = 0.01
+Vm31r = 0.1
+
+n02 = 1
+Kmf02 = 2
+
+n06 = 1
+Kmf06 = 2
+
+
+% New parameters for rev-1
+
+kc03f2 = 0.01
+ki03f = 0.01
+Ki03f2 = 0.01
+kc05f4 = 0.01
+kc32f = 0.01
+Vm32r = 0.01
+Ki08f = 0.01
+Ki17f = 0.01
+
+% New parameters for rev-2 (25/10/2022)
+
+kc33f = 0.01
+Vm33r = 0.01
+kc08f1 = 0.01
+ki33f = 0.01
+kc09f1 = 0.01
+
+% New parameters for rev-2 (26/10/2022)
+% for drug reaction
+
+Kmf08 = 0.01
+Kmf17 = 0.01
+Kmf03 = 0.01
+
+%% constants
+PTEN = 9.54
+
+
+%% constant for stimulation and inhibitor 
+IGF0 = 1e-30
+HRG0 = 1e-30
+FGF0 = 1e-30
+
+IGF_on = 5000
+FGF_on = 5000
+HRG_on = 5000
+
+FGFR4i_0 = 1e-30
+PI3Ki_0 = 1e-30
+ERBBi_0 =  1e-30
+AKTi_0 =  1e-30
+MEKi_0 =  1e-30
+inh_on = 1e10
+
+
+********** MODEL VARIABLES
+% % input function
+IGF = IGF0*piecewiseIQM(1,ge(time,IGF_on),0)
+HRG = HRG0*piecewiseIQM(1,ge(time,HRG_on),0)
+FGF = FGF0*piecewiseIQM(1,ge(time,FGF_on),0)
+FGFR4i = FGFR4i_0*piecewiseIQM(1,ge(time,inh_on),0)
+PI3Ki = PI3Ki_0*piecewiseIQM(1,ge(time,inh_on),0)
+ERBBi = ERBBi_0*piecewiseIQM(1,ge(time,inh_on),0)
+AKTi = AKTi_0*piecewiseIQM(1,ge(time,inh_on),0)
+MEKi = MEKi_0*piecewiseIQM(1,ge(time,inh_on),0)
+
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 
+********** MODEL REACTIONS
+% % IGF -> pIGFR
+IGFR <=> pIGFR : v01                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     
+	vf = kc01f * IGF * IGFR 
+    vr = Vm01r * (1 + ki01r*PTP) * pIGFR 
+
+
+% % FGFR4 -> pFGFR4
+FGFR4 <=> pFGFR4 : v02                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     
+	vf = kc02f * FGF * FGFR4 /(1 + Ki02f*(FGFR4i^n02/(Kmf02^n02 + FGFR4i^n02)))
+    vr = Vm02r *  (1 + ki02r1*PTP)*(1 + ki02r2*aCbl) * pFGFR4 
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         
+	
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 
+% % ERBB -> pERBB
+ERBB <=> pERBB : v03                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     
+	vf = (kc03f * HRG + kc03f2 * FOXO)* ERBB / (1+ ki03f *pERK) / (1 + Ki03f2*(ERBBi/(Kmf03 + ERBBi)))
+	vr = Vm03r *  (1 + ki03r*PTP)  * pERBB 
+% % HGR phosphorylate ERBB
+
+
+% % IRS/PI3K/PIP3 
+IRS <=> pIRS : v04                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     
+    vf = kc04f * pIGFR * IRS  / (1+ ki04f *pS6K)
+    vr = Vm04r * pIRS 
+% % pS6K phosphorylates and inhibits IRS
+
+    
+
+PI3K <=> aPI3K : v05                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     
+    vf = (kc05f1 * pIRS + kc05f2 * (aGAB1 + aGAB2) + kc05f3 * aRas + kc05f4 * pERBB) * PI3K /(1 + Ki06f*(PI3Ki^n06/(Kmf06^n06 + PI3Ki^n06)))
+    vr = Vm05r * aPI3K
+% % GAB1 and GAB2 have the same catalytic activity
+
+
+
+PIP2 <=> PIP3 : v06                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     
+    vf = kc06f * aPI3K * PIP2
+    vr = kc06r * PTEN * PIP3
+
+
+PDK1 <=> aPDK1 : v07
+    vf = kc07f * PIP3 * PDK1
+    vr = Vm07r * aPDK1
+
+
+Akt <=> pAkt : v08
+    vf = (kc08f * aPDK1 + kc08f1 * amTORC2) * Akt / (1 + Ki08f*(AKTi/(Kmf08 + AKTi)))
+    vr = Vm08r * pAkt
+
+
+mTORC1 <=> amTORC1 : v09
+    vf = (kc09f * pAkt + kc09f1 * pERK)* mTORC1
+    vr = Vm09r * amTORC1
+
+
+S6K <=> pS6K : v10
+    vf = kc10f * S6K * amTORC1 
+    vr = Vm10r * pS6K
+
+
+% % FRS2/Shp2
+FRS2 <=> pFRS2 : v11
+    vf = kc11f * pFGFR4 * FRS2 / (1+ki11r*pERK)   
+    vr = Vm11r * pFRS2 * (1+ki11f*aCbl)
+% % pERK a negative feedback
+
+
+% % FRS2/Grb2
+Grb2 <=> aGrb2 : v12
+    vf = (kc12f1 *  pFRS2/(1+ki12f*pSPRY2) + kc12f2 * pERBB + kc12f3 * pIRS) * Grb2  
+    vr = Vm12r * aGrb2
+% % SPRY2 a negative feedback
+
+
+% % Grb2/Sos
+Sos <=> aSos : v13
+    vf = kc13f * Sos * aGrb2  
+    vr = Vm13r * aSos
+
+% % Grb2/Shp2
+Shp2 <=> aShp2 : v14
+    vf = (kc14f1 * aGrb2 + kc14f2 * (aGAB1 + aGAB2)) * Shp2  
+    vr = Vm14r * aShp2
+
+Ras <=> aRas : v15
+    vf = (kc15f1 * aSos/(1 + ki15f*pERK) + kc15f2 * aShp2)*Ras  
+    vr = Vm15r * aRas
+% % pERK inhibits SoS
+
+Raf <=> aRaf : v16
+    vf = kc16f * Raf * aRas / ((1 + ki16f1*pAkt) * (1 + ki16f2*(SPRY2 + pSPRY2)))
+    vr = Vm16r * aRaf
+% % pAKT crosstalk
+
+
+MEK <=> pMEK : v17
+    vf = kc17f * MEK * aRaf / (1 + Ki17f*(MEKi/(Kmf17 + MEKi)))
+    vr = Vm17r * pMEK
+
+
+ERK <=> pERK : v18
+    vf = kc18f * ERK * pMEK 
+    vr = Vm18r * pERK
+
+
+% % GAB1
+GAB1 <=> aGAB1 : v19
+    vf = kc19f * (1 + alpha19f * PIP3)* aGrb2 * GAB1 /(1 + ki19f*pERK)
+    vr = Vm19r * aGAB1    
+
+% % GAB2
+GAB2 <=> aGAB2 : v20
+    vf = kc20f * (1 + alpha20f * PIP3)* aGrb2 * GAB2 /((1 + ki20f1*pERK) * (1 + ki20f2*pAkt))
+    vr = Vm20r * aGAB2
+
+% % transcriptional regulation
+=> mSPRY2 : v21
+    vf = vs21 + kc21 * pERK /(Km21 + pERK) 
+
+mSPRY2 => : v22
+    vf = (vs21 + kc21)/100 * mSPRY2
+% % assuming mSPRY2 = 100 at maximum
+
+ => SPRY2 : v23
+    vf = kc23 * mSPRY2 / (Km23 + mSPRY2)
+
+SPRY2 =>  : v24
+    vf = kc24 * SPRY2 
+
+SPRY2 <=> pSPRY2  : v25
+    vf = kc25f * SPRY2 * pFRS2
+    vr = kc25r * pSPRY2
+
+pSPRY2 =>  : v26
+    vf = kc26 * pSPRY2
+
+
+% % transcriptional regulation
+=> mPTP : v27
+    vf = vs27 + kc27a * pERK / (Km27a + pERK) + kc27b *pAkt /(Km27b + pAkt)
+
+mPTP => : v28
+    vf = (vs27 + kc27a + kc27b)/100 * mPTP
+% % assuming mPTP = 100 at maxium
+
+ => PTP : v29
+    vf = kc29 * mPTP / (Km29 + mPTP)
+
+PTP => : v30
+    vf = kc29/100 * PTP
+% % assuming PTP = 100 at maxium
+
+% % CBL
+Cbl <=> aCbl : v31
+    vf = kc31f * aGrb2 * Cbl
+    vr = Vm31r * aCbl
+    
+
+FOXO <=> pFOXO : v32
+    vf = kc32f * pAkt * FOXO
+    vr = Vm32r * pFOXO
+
+mTORC2 <=> amTORC2 : v33
+    vf = kc33f * PIP3 * mTORC2 /(1 + ki33f*pS6K)
+    vr = Vm33r * amTORC2
+
+
+********** MODEL FUNCTIONS
+
+
+********** MODEL EVENTS
+
+
+********** MODEL MATLAB FUNCTIONS
+

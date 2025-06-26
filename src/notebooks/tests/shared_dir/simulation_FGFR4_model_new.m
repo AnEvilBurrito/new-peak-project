@@ -12,7 +12,6 @@ X0  = eval(model);
 
 %% 1. load the best-fitted parameter sets
 bestfit_paramsets = readmatrix('fitted_paramsets_rev2_STEP3.csv');
-
 % note: the first column is the fit score
 bestfit_paramsets(:,1) = [];
 % the first parameter used for this synthetic study
@@ -23,10 +22,7 @@ x0s = X0;
 %% Load the individualised specie values 
 
 init_conditions_table = readtable('median-ccle_protein_expression-fgfr4_model_ccle_match_rules-375x51-initial_conditions.csv.csv','Delimiter',',', 'ReadVariableNames', true');
-
 % ensure that each row is of a 'double' type that is 51x1
-
-
 %% Test replacing X0s with a row from init conditions table
 
 x0s = transpose(table2array(init_conditions_table(4,2:end)));

@@ -9,15 +9,15 @@ def load_csv_as_dict(file_path):
 def distort_parameters(base_params, num_samples=1000, distortion_range=(0.25, 4.0), random_seed=42):
     rng = np.random.default_rng(random_seed)
     keys = list(base_params.keys())
-    
+
     modified_parameter_sets = []
-    for _ in range(num_samples):
+    for i in range(num_samples):
         new_params = {
-            k: base_params[k] * rng.uniform(*distortion_range)
-            for k in keys
+            "param_set_id": i,
+            **{k: base_params[k] * rng.uniform(*distortion_range) for k in keys}
         }
         modified_parameter_sets.append(new_params)
-    
+
     return pd.DataFrame(modified_parameter_sets)
 
 if __name__ == "__main__":
@@ -36,5 +36,5 @@ if __name__ == "__main__":
         distortion_range=(args.min_distort, args.max_distort),
         random_seed=args.seed
     )
-    df.to_hdf(f"{data_dir}/modified_parameters.h5", key="params", mode="w")
+    df.to_hdf(f"{data_dir}/modified_parameters.h5", key="params", mode="w", format="table", index=False)
     print(f"Saved {args.samples} distorted parameter sets to 'modified_parameters.h5'")

@@ -36,5 +36,5 @@ if __name__ == "__main__":
         distortion_range=(args.min_distort, args.max_distort),
         random_seed=args.seed
     )
-    df.to_hdf(f"{data_dir}/modified_parameters.h5", key="params", mode="w", format="table", index=False)
+    df.to_hdf(f"{data_dir}/modified_parameters.h5", key="data", mode="w")
     print(f"Saved {args.samples} distorted parameter sets to 'modified_parameters.h5'")

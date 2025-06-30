@@ -88,9 +88,11 @@ function batch_run_simulation(init_file, param_file, paramnames, out_file)
     fprintf("Results saved to: %s\n", out_file);
 end
 
-% -------------------------------------------------------------------------
 function out = convertToChar(x)
-% CONVERTTOCHAR Safely convert any value to a char vector
+% CONVERTTOCHAR Safely convert any value (including cell wrappers) to a char vector
+    if iscell(x)
+        x = x{1};  % unwrap one layer
+    end
     if ischar(x)
         out = x;
     elseif isstring(x)

@@ -1,90 +1,103 @@
 function batch_run_simulation(init_file, param_file, paramnames, out_file)
-% BATCH_RUN_SIMULATION performs a grid of simulations for all initial conditions × parameter sets.
+% BATCH_RUN_SIMULATION runs all (IC x PARAM) combinations in parallel.
 %
 % Inputs:
-%   init_file   - HDF5 file (.h5) with initial conditions (first column = ID)
-%   param_file  - HDF5 file (.h5) with parameter sets (first column = ID)
-%   paramnames  - 1 x P cell array of parameter names (must match parameter set columns excluding ID)
-%   out_file    - Output .h5 file to store simulation result table
-%
-% Output:
-%   Saves a flat HDF5 table compatible with pandas.read_hdf()
+%   init_file   - .csv file with initial conditions (first column = ID)
+%   param_file  - .csv file with parameter sets (first column = ID)
+%   paramnames  - 1 x P cell array of parameter names
+%   out_file    - Output filename (.csv)
 
-    % Load initial conditions from Python-written HDF5
-    init_data = h5read(init_file, '/data/block0_values');
-    init_names = h5read(init_file, '/data/block0_items');
-    init_tbl = array2table(init_data', 'VariableNames', cellstr(init_names));
+    % Load initial conditions
+    init_tbl = readtable(init_file);
+    init_ids = init_tbl{:,1};         % first column = ID
+    init_mat = init_tbl{:,2:end};     % remaining = initial conditions
 
     % Load parameter sets
-    param_data = h5read(param_file, '/data/block0_values');
-    param_names = h5read(param_file, '/data/block0_items');
-    param_tbl = array2table(param_data', 'VariableNames', cellstr(param_names));
+    param_tbl = readtable(param_file);
+    param_ids = param_tbl{:,1};       % first column = ID
+    param_mat = param_tbl{:,2:end};   % remaining = parameter values
 
-    % Separate out IDs and numeric matrices
-    init_ids = init_tbl{:,1};           % First column = cell line ID
-    init_mat = init_tbl{:, 2:end};      % Initial condition values
+    x = size(init_mat, 1);  % number of initial conditions
+    y = size(param_mat, 1); % number of parameter sets
+    total_runs = x * y;
 
-    param_ids = param_tbl{:,1};         % First column = parameter set ID
-    param_mat = param_tbl{:, 2:end};    % Parameter values
+    % Index map
+    [I_idx, J_idx] = ind2sub([x, y], 1:total_runs);
 
-    [x, ~] = size(init_mat);
-    [y, ~] = size(param_mat);
+    % Preallocate outputs
+    all_tbl = cell(1, total_runs);
+    failure_flags = false(1, total_runs);
 
-    % Initialize results
-    all_tbl = {};
-    run_idx = 1;
+    parfor run_idx = 1:total_runs
+        i = I_idx(run_idx);
+        j = J_idx(run_idx);
 
-    for i = 1:x
-        for j = 1:y
-            x0 = init_mat(i, :);
-            paramvals = param_mat(j, :);
-            ic_id = init_ids(i);
-            param_id = param_ids(j);
+        x0 = init_mat(i, :);
+        paramvals = param_mat(j, :);
+        ic_id = init_ids(i);
+        param_id = param_ids(j);
 
-            try
-                [tbl, ~, ~] = run_simulation(paramvals, x0, paramnames);
+        try
+            [tbl, ~, ~] = run_simulation(paramvals, x0, paramnames);
 
-                % Attach metadata columns
-                tbl.RunID = repmat(run_idx, height(tbl), 1);
-                tbl.IC_ID = repmat(ic_id, height(tbl), 1);
-                tbl.ParamSet_ID = repmat(param_id, height(tbl), 1);
-                tbl.Time = str2double(tbl.Properties.RowNames);
+            ic_id_str = convertToChar(ic_id);
+            param_id_str = convertToChar(param_id);
 
-                % Remove row names to simplify output
-                tbl.Properties.RowNames = {};
+            % Add metadata
+            tbl.RunID = repmat(run_idx, height(tbl), 1);
+            tbl.IC_ID = repmat({ic_id_str}, height(tbl), 1);
+            tbl.ParamSet_ID = repmat({param_id_str}, height(tbl), 1);
+            tbl.Time = str2double(tbl.Properties.RowNames);
 
-                all_tbl{end+1} = tbl; %#ok<AGROW>
+            tbl.Properties.RowNames = {};
+            all_tbl{run_idx} = tbl;
 
-                fprintf('Run %d completed: IC %s, ParamSet %s\n', run_idx, string(ic_id), string(param_id));
-
-            catch ME
-                warning("Simulation failed at IC %s, ParamSet %s: %s", string(ic_id), string(param_id), ME.message);
-            end
-
-            run_idx = run_idx + 1;
+        catch ME
+            failure_flags(run_idx) = true;
+            fprintf("Simulation failed: Run %d (IC %s, ParamSet %s): %s\n", ...
+                run_idx, convertToChar(ic_id), convertToChar(param_id), ME.message);
         end
     end
 
-    % Combine all simulation results
-    if isempty(all_tbl)
-        error('No simulations completed successfully. Nothing to save.');
+    % Assemble successful results
+    success_tbls = all_tbl(~failure_flags);
+    if isempty(success_tbls)
+        error("All simulations failed. Nothing to save.");
     end
 
-    final_tbl = vertcat(all_tbl{:});
+    final_tbl = vertcat(success_tbls{:});
 
-    % Reorder columns: metadata first, then readouts
+    % Reorder columns
     meta_cols = {'RunID', 'IC_ID', 'ParamSet_ID', 'Time'};
     data_cols = setdiff(final_tbl.Properties.VariableNames, meta_cols, 'stable');
     final_tbl = final_tbl(:, [meta_cols, data_cols]);
 
-    % Enforce .h5 extension
-    if ~endsWith(out_file, '.h5')
-        warning('Output file does not end with .h5. Forcing .h5 extension.');
-        out_file = strcat(out_file, '.h5');
+    % Ensure .csv extension
+    if ~endsWith(out_file, '.csv')
+        out_file = strcat(out_file, '.csv');
     end
 
-    % Save to HDF5 file as flat table
-    writetable(final_tbl, out_file, 'FileType', 'spreadsheet');
+    % Write output table
+    writetable(final_tbl, out_file);
 
-    fprintf("All %d simulations completed.\nResults saved to: %s\n", run_idx - 1, out_file);
+    % Final report
+    num_failures = sum(failure_flags);
+    num_success = total_runs - num_failures;
+
+    fprintf("Simulations completed: %d successful, %d failed.\n", num_success, num_failures);
+    fprintf("Results saved to: %s\n", out_file);
+end
+
+% -------------------------------------------------------------------------
+function out = convertToChar(x)
+% CONVERTTOCHAR Safely convert any value to a char vector
+    if ischar(x)
+        out = x;
+    elseif isstring(x)
+        out = char(x);
+    elseif isnumeric(x)
+        out = num2str(x);
+    else
+        error("Unsupported ID type: %s", class(x));
+    end
 end

@@ -12,9 +12,5 @@ X0  = eval(model);
 init_file = 'all_initial_conditions.h5';
 param_file = 'modified_parameters.h5';
 
-param_data = h5read(param_file, '/data/block0_values');
-param_names = h5read(param_file, '/data/block0_items');
-param_tbl = array2table(param_data', 'VariableNames', cellstr(param_names));
-
 %%
 batch_run_simulation(init_file, param_file, paramnames, 'batch_simulation_data.h5')

@@ -1,9 +1,10 @@
 import pandas as pd
 import numpy as np
 import argparse
+import os
 
 def load_csv_as_dict(file_path):
-    df = pd.read_csv(file_path)  # has headers: 'Parameter', 'Value'
+    df = pd.read_csv(file_path)  # Expects headers: 'Parameter', 'Value'
     return dict(zip(df['Parameter'], df['Value']))
 
 def distort_parameters(base_params, num_samples=1000, distortion_range=(0.25, 4.0), random_seed=42):
@@ -29,6 +30,8 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     data_dir = "src/notebooks/tests/shared_dir/src"
+    os.makedirs(data_dir, exist_ok=True)
+
     base_params = load_csv_as_dict(f"{data_dir}/parameters.csv")
     df = distort_parameters(
         base_params,
@@ -36,5 +39,7 @@ if __name__ == "__main__":
         distortion_range=(args.min_distort, args.max_distort),
         random_seed=args.seed
     )
-    df.to_hdf(f"{data_dir}/modified_parameters.h5", key="data", mode="w")
-    print(f"Saved {args.samples} distorted parameter sets to 'modified_parameters.h5'")
+
+    output_path = f"{data_dir}/modified_parameters.csv"
+    df.to_csv(output_path, index=False)
+    print(f"Saved {args.samples} distorted parameter sets to '{output_path}'")

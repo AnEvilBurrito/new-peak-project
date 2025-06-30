@@ -41,4 +41,4 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
     os.makedirs(os.path.dirname(args.output), exist_ok=True)
-    process_initial_conditions(args.input, args.output)
+    process_initial_conditions(args.input, args.output, sample_size=args.sample_size)

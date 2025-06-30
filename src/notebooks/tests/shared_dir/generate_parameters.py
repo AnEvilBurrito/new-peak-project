@@ -41,6 +41,6 @@ if __name__ == "__main__":
         random_seed=args.seed
     )
 
-    output_path = f"{data_dir}/{args.output}.csv"
+    output_path = f"{data_dir}/{args.output}"
     df.to_csv(output_path, index=False)
     print(f"Saved {args.samples} distorted parameter sets to '{output_path}'")

@@ -27,6 +27,7 @@ if __name__ == "__main__":
     parser.add_argument("--samples", type=int, default=1000, help="Number of parameter sets to generate")
     parser.add_argument("--min_distort", type=float, default=0.25, help="Minimum distortion factor")
     parser.add_argument("--max_distort", type=float, default=4.0, help="Maximum distortion factor")
+    parser.add_argument("--output", type=str, default="modified_parameters.csv",)
     args = parser.parse_args()
 
     data_dir = "src/notebooks/tests/shared_dir/src"
@@ -40,6 +41,6 @@ if __name__ == "__main__":
         random_seed=args.seed
     )
 
-    output_path = f"{data_dir}/modified_parameters.csv"
+    output_path = f"{data_dir}/{args.output}.csv"
     df.to_csv(output_path, index=False)
     print(f"Saved {args.samples} distorted parameter sets to '{output_path}'")

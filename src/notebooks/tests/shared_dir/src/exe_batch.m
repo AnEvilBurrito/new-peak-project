@@ -10,9 +10,9 @@ p0  = eval(strcat(model,"('parametervalues')"));
 X0  = eval(model);
 
 init_file = 'all_initial_conditions.csv';
-param_file = 'true_parameters.csv';
+param_file = 'modified_parameters_distorted_4.csv';
 output_dir = 'G:/My Drive/DAWSON PHD PROJECT/Biomarker Data Repository/data/new-peak-project/experiments/matlab_output';
-output_dir_file = [output_dir, '/ground_truth_data.csv'];
+output_dir_file = [output_dir, '/suboptimal_data_4.csv'];
 
 %%
-batch_run_simulation(init_file, param_file, paramnames, output_dir_file, 'COMBINE')
+batch_run_simulation(init_file, param_file, paramnames, output_dir_file, 'MATCH')

@@ -24,23 +24,25 @@ def distort_parameters(base_params, num_samples=1000, distortion_range=(0.25, 4.
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--seed", type=int, default=42, help="Random seed")
-    parser.add_argument("--samples", type=int, default=1000, help="Number of parameter sets to generate")
-    parser.add_argument("--min_distort", type=float, default=0.25, help="Minimum distortion factor")
-    parser.add_argument("--max_distort", type=float, default=4.0, help="Maximum distortion factor")
-    parser.add_argument("--output", type=str, default="modified_parameters.csv",)
+    parser.add_argument("--samples", type=int, default=375, help="Number of parameter sets to generate")
+    parser.add_argument("--distort_scale", type=float, default=4, help="distortion factor")    
+    parser.add_argument("--output", type=str, default=f"modified_parameters_.csv",)
     args = parser.parse_args()
+    scale = args.distort_scale
+    min_scale = 1 / scale
+    max_scale = scale
 
     data_dir = "src/notebooks/tests/shared_dir/src"
     os.makedirs(data_dir, exist_ok=True)
-
     base_params = load_csv_as_dict(f"{data_dir}/parameters.csv")
     df = distort_parameters(
         base_params,
         num_samples=args.samples,
-        distortion_range=(args.min_distort, args.max_distort),
+        distortion_range=(min_scale, max_scale),
         random_seed=args.seed
     )
-
+    # append distortion scale to args.output
+    args.output = args.output.replace(".csv", f"distorted_{scale}.csv")
     output_path = f"{data_dir}/{args.output}"
     df.to_csv(output_path, index=False)
     print(f"Saved {args.samples} distorted parameter sets to '{output_path}'")

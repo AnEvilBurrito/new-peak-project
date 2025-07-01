@@ -25,9 +25,10 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--seed", type=int, default=42, help="Random seed")
     parser.add_argument("--samples", type=int, default=375, help="Number of parameter sets to generate")
-    parser.add_argument("--distort_scale", type=float, default=4, help="distortion factor")    
+    parser.add_argument("--distort_scale", type=float, default=20, help="distortion factor")    
     parser.add_argument("--output", type=str, default=f"modified_parameters_.csv",)
     args = parser.parse_args()
+    # distortion_scales = [1.05, 1.1, 1.2, 1.3, 1.5, 2, 4, 10, 20] # scales for the distortion of the model parameters
     scale = args.distort_scale
     min_scale = 1 / scale
     max_scale = scale

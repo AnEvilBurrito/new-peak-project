@@ -1,11 +1,20 @@
-function batch_run_simulation(init_file, param_file, paramnames, out_file)
-% BATCH_RUN_SIMULATION runs all (IC x PARAM) combinations in parallel.
+function batch_run_simulation(init_file, param_file, paramnames, out_file, mode)
+% BATCH_RUN_SIMULATION runs (IC x PARAM) combinations in parallel.
 %
 % Inputs:
 %   init_file   - .csv file with initial conditions (first column = ID)
 %   param_file  - .csv file with parameter sets (first column = ID)
 %   paramnames  - 1 x P cell array of parameter names
 %   out_file    - Output filename (.csv)
+%   mode        - 'COMBINE' or 'MATCH'
+
+    arguments
+        init_file
+        param_file
+        paramnames
+        out_file
+        mode {mustBeMember(mode, {'COMBINE', 'MATCH'})}
+    end
 
     % Load initial conditions
     init_tbl = readtable(init_file);
@@ -19,10 +28,20 @@ function batch_run_simulation(init_file, param_file, paramnames, out_file)
 
     x = size(init_mat, 1);  % number of initial conditions
     y = size(param_mat, 1); % number of parameter sets
-    total_runs = x * y;
 
-    % Index map
-    [I_idx, J_idx] = ind2sub([x, y], 1:total_runs);
+    switch mode
+        case 'COMBINE'
+            total_runs = x * y;
+            [I_idx, J_idx] = ind2sub([x, y], 1:total_runs);
+
+        case 'MATCH'
+            if x ~= y
+                error("MATCH mode requires the same number of initial conditions and parameter sets (got %d vs %d).", x, y);
+            end
+            total_runs = x;
+            I_idx = 1:x;
+            J_idx = 1:y;
+    end
 
     % Preallocate outputs
     all_tbl = cell(1, total_runs);

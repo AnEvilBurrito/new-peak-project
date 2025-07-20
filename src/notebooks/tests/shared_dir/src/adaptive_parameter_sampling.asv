@@ -1,0 +1,102 @@
+function [accepted_params, param_ic_map, total_tries, skipped_ics] = adaptive_parameter_sampling( ...
+    init_file, param_file, distortion_scale, max_attempts, seed, verbose, skip_log_file)
+
+
+    if nargin < 6
+        verbose = true;
+    end
+    if nargin < 7
+        skip_log_file = '';  % default: no logging
+    end
+
+    rng(seed);
+
+    % Load initial conditions
+    init_tbl = readtable(init_file);
+    ic_ids = init_tbl{:,1};            % ID column
+    x0_list = init_tbl{:,2:end};       % Initial condition matrix
+
+    % Load base parameter values
+    param_tbl = readtable(param_file);
+    param_template_vals = param_tbl{1, 2:end};         % Use the first row of param file
+    paramnames = eval(strcat("deblank(",model,"('Parameters'))"));
+
+    num_ic = size(x0_list, 1);
+    num_params = numel(param_template_vals);
+
+    % Distortion bounds
+    min_scale = 1 / distortion_scale;
+    max_scale = distortion_scale;
+
+    % Output containers
+    accepted_params = table();
+    param_ic_map = [];
+    skipped_ics = {};
+    total_tries = 0;
+    param_set_id = 0;
+
+    for i = 1:num_ic
+        ic_id = ic_ids(i);
+        x0s = double(x0_list(i, :));
+
+        % Check baseline parameter set first
+        try
+            [~, ~, ~] = run_simulation(param_template_vals(:)', x0s(:)', paramnames);
+        catch
+            if verbose
+                warning("IC %s: baseline parameter set failed — skipping resampling", string(ic_id));
+            end
+            skipped_ics{end+1,1} = ic_id;  % Add to skip list
+            continue;
+        end
+
+        % Baseline is valid, proceed with distortion attempts
+        attempt = 0;
+        success = false;
+
+        while ~success && attempt < max_attempts
+            attempt = attempt + 1;
+            total_tries = total_tries + 1;
+
+            % Distort the base parameter values
+            scale_factors = min_scale + (max_scale - min_scale) * rand(1, num_params);
+            distorted_vals = param_template_vals .* scale_factors;
+
+            try
+                [~, ~, ~] = run_simulation(distorted_vals(:)', x0s(:)', paramnames);
+
+                % Save successful parameter set
+                row = array2table(distorted_vals, 'VariableNames', paramnames);
+                row.param_set_id = param_set_id;
+                accepted_params = [accepted_params; row];
+                param_ic_map = [param_ic_map; {param_set_id, ic_id}];
+
+                param_set_id = param_set_id + 1;
+                success = true;
+
+            catch ME
+                if verbose
+                    warning("IC %s failed on attempt %d: %s", string(ic_id), attempt, ME.message);
+                end
+            end
+        end
+
+        if ~success && verbose
+            warning("IC %s: all %d distortion attempts failed", string(ic_id), max_attempts);
+        end
+    end
+
+    % Convert param_ic_map to table
+    param_ic_map = cell2table(param_ic_map, 'VariableNames', {'param_set_id', 'IC_ID'});
+    accepted_params = movevars(accepted_params, 'param_set_id', 'Before', 1);
+
+    % Optionally write skipped ICs to file
+    if ~isempty(skip_log_file)
+        fid = fopen(skip_log_file, 'w');
+        fprintf(fid, "Skipped ICs due to base param failure:\n");
+        for j = 1:length(skipped_ics)
+            fprintf(fid, "%s\n", string(skipped_ics{j}));
+        end
+        fclose(fid);
+    end
+end

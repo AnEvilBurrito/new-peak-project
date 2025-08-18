@@ -8,7 +8,7 @@ from .Regulation import Regulation
 from .Drug import Drug
 
 class ModelSpec2:
-    def __init__(self, num_intermediate_layers=3):
+    def __init__(self, num_intermediate_layers=2):
         '''
         Initialize the ModelSpecification class with attributes for Drugs, Receptors, Intermediate Layers, and Outcomes.
         ModelSpec2 will automatically handle drug interactions 
@@ -22,6 +22,8 @@ class ModelSpec2:
         self.intermediate_layers = [[] for _ in range(num_intermediate_layers)]
         
         self.regulations = []
+        self.ordinary_regulations = []
+        self.feedback_regulations = []
         self.randomise_parameters = True
 
         self.drugs = []
@@ -73,6 +75,19 @@ class ModelSpec2:
             reg = Regulation(from_specie=drug.name, to_specie=specie, reg_type=type)
             self.regulations.append(reg)
             
+    def add_regulation(self, from_specie, to_specie, reg_type):
+        '''
+        Adds a regulation to the model.
+        Input:
+            from_specie: str | The specie that regulates
+            to_specie: str | The specie that is regulated
+            reg_type: str | The type of regulation, either 'up' or 'down'
+        '''
+        if reg_type not in ['up', 'down']:
+            raise ValueError("Regulation type must be either 'up' or 'down'")
+        
+        reg = Regulation(from_specie=from_specie, to_specie=to_specie, reg_type=reg_type)
+        self.regulations.append(reg)
 
     def generate_specifications(self, num_cascades, num_regulations, random_seed=None, verbose=1):
         '''
@@ -90,6 +105,8 @@ class ModelSpec2:
         random_seed_number = random_seed  # None if do not want to fix the seed
         if random_seed_number is not None:
             rng = np.random.default_rng(random_seed_number)
+        else: 
+            rng = np.random.default_rng()
             
         logger.debug('--- Generating a random network ---')
         logger.debug(f'Random Seed: {random_seed_number}')
@@ -99,7 +116,7 @@ class ModelSpec2:
   
         # based on the number of cascades, generate the species, index from 1
         self.receptors = [f'R{i+1}' for i in range(num_cascades)]
-        self.intermediate_layers = [[f'I{i+1}_{j+1}' for j in range(num_cascades)] for i in range(len(self.receptors))]
+        self.intermediate_layers = [[f'I{i+1}_{j+1}' for j in range(num_cascades)] for i in range(len(self.intermediate_layers))]
         # there should only be one outcome in this spec 
         self.outcomes = ['O']
         
@@ -121,45 +138,64 @@ class ModelSpec2:
             reg = Regulation(from_specie=self.intermediate_layers[-1][i], to_specie=self.outcomes[0], reg_type='up')
             self.regulations.append(reg)
             
+        logger.debug(f'Generated Ordinary Regulations:')
+        for reg in self.regulations:
+            logger.debug(f'From {reg.from_specie} to {reg.to_specie} of type {reg.reg_type}')
+            
         # finally, based on num_regulations, generate regulations between different species, but outcome 
         # should not be regulating other species
         all_species = self.get_all_species(include_drugs=False, include_outcomes=False)
+        # at this point, all regulations should be only the ordinary regulations
+        all_regulations = [(reg.from_specie, reg.to_specie) for reg in self.regulations]
+        self.ordinary_regulations = self.regulations.copy()
+        feedback_regulations = []
+        
+        def check_species(species1, species2, feedback_regulations):
+            '''
+            Check if specie1 regulates specie2 in the current regulations.
+            '''
+            for reg in self.regulations:
+                if (reg.from_specie == species1 and reg.to_specie == species2):
+                    return True
+            for reg in feedback_regulations:
+                if (reg.from_specie == species1 and reg.to_specie == species2):
+                    return True
+            return False
+        
         for _ in range(num_regulations):
             # randomly select two species to regulate each other
             species1 = rng.choice(all_species)
-            species2 = rng.choice(all_species)
+            species2 = rng.choice([s for s in all_species if s != species1])
             reg_type = rng.choice(['up', 'down'])
-            reg = Regulation(from_specie=species1, to_specie=species2, reg_type=reg_type)
             total_species = len(all_species)
             max_iterations = total_species * 10  # arbitrary large number to avoid infinite loop
-            num_iterations = 0
-            # while loop to ensure that the two species are not the same and the regulation doesn't already exist
-            while (species1 == species2 or reg in self.regulations) and num_iterations < max_iterations:
-                if species1 == species2:
-                    # randomly select a new species if they are the same
-                    species2 = rng.choice(all_species)
-                else:
-                    # if they are different, check if the regulation already exists
-                    if reg in self.regulations:
-                        # if it exists, randomly select a new species
-                        species1 = rng.choice(all_species)
-                        species2 = rng.choice(all_species)
-                        reg = Regulation(from_specie=species1, to_specie=species2, reg_type=reg_type)
-                num_iterations += 1
-            # if we reach here, we have found two different species to regulate each other
-            if num_iterations >= max_iterations:
-                # throw an error if we cannot find two different species
-                raise ValueError("Could not find two different species to regulate each other. Max iterations reached.", max_iterations)
+            valid = False
+            for _ in range(max_iterations):
+                if species1 != species2 and not check_species(species1, species2, feedback_regulations):
+                    valid = True
+                    break
+                # Reselect maintaining biological constraints [1]
+                species1 = rng.choice(all_species)
+                species2 = rng.choice([s for s in all_species if s != species1])
+                reg_type = rng.choice(['up', 'down'])
+            if not valid:
+                raise ValueError("Failed to find valid species pair")
+
+            reg = Regulation(species1, species2, reg_type)
+            feedback_regulations.append(reg)
             
-            self.regulations.append(reg)
-        logger.debug(f'Generated Regulations: {self.regulations}')
+        # add the feedback regulations to the model
+        self.feedback_regulations = feedback_regulations
+        self.regulations.extend(feedback_regulations)
+        logger.debug(f'Generated Feedback Regulations:')
+        for reg in feedback_regulations:
+            logger.debug(f'From {reg.from_specie} to {reg.to_specie} of type {reg.reg_type}')
         
     ### Helpers 
     def generate_archtype_and_regulators(self, specie):
 
-        all_regulations = self.regulations
-        all_regulation_types = self.regulation_types
-        
+        all_regulations = [(reg.from_specie, reg.to_specie) for reg in self.regulations]
+        all_regulation_types = [reg.reg_type for reg in self.regulations]            
         regulators_for_specie = []
         for i, reg in enumerate(all_regulations):
             if reg[1] == specie:
@@ -180,34 +216,30 @@ class ModelSpec2:
         # sort the regulators by type, up first and down second
         regulators_for_specie = sorted(regulators_for_specie, key=lambda x: x[1], reverse=True)
         regulators_sorted = [r[0] for r in regulators_for_specie]
-        # regulators_sorted_phos = [r[0]+'p' for r in regulators_for_specie]
-        regulators_sorted_modified = []
-        for r in regulators_sorted:
-            if 'D' in r:
-                regulators_sorted_modified.append(r)
-            else:
-                regulators_sorted_modified.append(r+'p')
+
         # print(f'Sorted regulators information: {regulators_for_specie}')
         # print(f'Final regulators for {specie}: {regulators_sorted_phos}')
         # print(f'Rate law for {specie}: {rate_law}')
-        return rate_law, regulators_sorted_modified
+        return rate_law, regulators_sorted                                            
 
     # generate random parameters informed by a scale
     def generate_random_parameters(self, reaction_archtype: ReactionArchtype, scale_range, multiplier_range, random_seed=None):
         if random_seed is not None:
             rng = np.random.default_rng(random_seed)
+        else:
+            rng = np.random.default_rng()
 
         assumed_values = reaction_archtype.assume_parameters_values
         # print(f'Assumed values: {assumed_values}')
         r_params = []
-        for key, value in assumed_values.items():
+        for _, value in assumed_values.items():
             rand = rng.uniform(value*scale_range[0], value*scale_range[1])
             rand *= rng.uniform(multiplier_range[0], multiplier_range[1])
             r_params.append(rand)
 
         return tuple(r_params)
 
-    def generate_network(self, network_name, mean_range_species, rangeScale_params, rangeMultiplier_params, verbose=1, random_seed=None) -> ModelBuilder:
+    def generate_network(self, network_name, mean_range_species, rangeScale_params, rangeMultiplier_params, random_seed=None) -> ModelBuilder:
         '''
         Returns a pre-compiled ModelBuilder object with the given specifications, 
         ready to be simulated. Pre-compiled model allows the user to manually set the initial values of the species
@@ -225,80 +257,79 @@ class ModelSpec2:
         # fix np random seed for reproducibility
         if random_seed is not None:
             rng = np.random.default_rng(random_seed)
+        else:
+            rng = np.random.default_rng()
+        
+        
+        def add_reactions(specie, model: ModelBuilder):
+            '''
+            Returns the forward and reverse reactions for a given specie.
+            '''
+            forward_reaction = self.get_forward_reaction(specie, mean_range_species, rangeScale_params, rangeMultiplier_params, rng)
+            reverse_reaction = self.get_reverse_reaction(specie, rangeScale_params, rangeMultiplier_params, rng)
+            # add reverse reaction first, then forward reaction to ensure specie values are set correctly
+            model.add_reaction(reverse_reaction)
+            model.add_reaction(forward_reaction)
         
         # generate reaction classes layer by layer, starting from receptors
         # reactions are in the form of R1->R1a (which is an activation of R1)
         for receptor in self.receptors:
-            # forward reaction
-            rate_law, regulators = self.generate_archtype_and_regulators(receptor)
-            
+            add_reactions(receptor, model)
         
-        
+        # generate reactions for intermediate layers
+        for layer in self.intermediate_layers:
+            for specie in layer:
+                add_reactions(specie, model)
+                
+        # generate reactions for outcomes
+        for outcome in self.outcomes:
+            add_reactions(outcome, model)
+        for drug in self.drugs:
+            model.add_simple_piecewise(0, drug.start_time, self.drug_values[drug.name], drug.name)
         model.precompile()
+        logger = logging.getLogger(__name__)
+        logger.info(f"Generated model {network_name} with {len(model.reactions)} reactions.")
+        logger.info(f"Model States: {len(model.states)}")
+        logger.info(f"Model Parameters: {len(model.parameters)}")
+        logger.info(f"Model Reactions: {len(model.reactions)}")
+        logger.debug('\n--- Antimony Model ---\n')
+        logger.debug(model.get_antimony_model())
         return model
+
+    def get_forward_reaction(self, specie, mean_range_species, rangeScale_params, rangeMultiplier_params, rng):
+        forward_rate_law, regulators = self.generate_archtype_and_regulators(specie)
+        forward_params = self.generate_random_parameters(forward_rate_law, rangeScale_params, rangeMultiplier_params, rng)
+        forward_state_val = rng.integers(mean_range_species[0], mean_range_species[1])
+        forward_reaction = Reaction(forward_rate_law, 
+                                        (specie,), (specie + 'a',), 
+                                        reactant_values=forward_state_val,
+                                        extra_states=regulators,
+                                        parameters_values=tuple(forward_params), 
+                                        zero_init=False)
+        return forward_reaction
+
+    def get_reverse_reaction(self, specie, rangeScale_params, rangeMultiplier_params, rng):
+        reverse_params = self.generate_random_parameters(michaelis_menten, rangeScale_params, rangeMultiplier_params, rng)
+        reverse_reaction = Reaction(michaelis_menten, 
+                                         (specie + 'a',), (specie,), 
+                                         parameters_values=tuple(reverse_params), 
+                                         zero_init=False)
+        return reverse_reaction
     
     def get_regulations(self):
         '''
         extracts the regulations and their types from the model, as lists of tuples
         '''
-        regulations = []
-        for i, reg in enumerate(self.regulations):
-            regulation = (reg[0], reg[1])
-            regulation_type = self.regulation_types[i]
-            regulations.append((regulation, regulation_type))
-        return regulations
-        
+        return self.regulations.copy()
+    
+    def get_ordinary_regulations(self):
+        '''
+        extracts the ordinary regulations and their types from the model, as lists of tuples
+        '''
+        return self.ordinary_regulations.copy()
+    
     def get_feedback_regulations(self):
-        
         '''
-        extracts the feedback regulations from the model regulations
+        extracts the feedback regulations and their types from the model, as lists of tuples
         '''
-        
-        feedback_regs = []
-        for i, reg in enumerate(self.regulations):
-            feedback = True
-            specie_1 = reg[0]
-            specie_2 = reg[1]
-            if 'A' in specie_1:
-                # exact A -> B regulations are not feedback regulations
-                number_1 = int(specie_1[1:])
-                number_2 = int(specie_2[1:])
-                if number_1 == number_2 and 'B' in specie_2:
-                    feedback = False
-            if 'B' in specie_1:
-                # B -> C forward regulations are not feedback regulations
-                if 'C' in specie_2:
-                    feedback = False
-            if 'D' in specie_1:
-                # drug regulations are not feedback regulations
-                feedback = False
-            if feedback:
-                feedback_regs.append((reg, self.regulation_types[i]))
-        return feedback_regs
-        
-    def remove_regulation(self, reg, reg_type):
-        
-        '''
-        removes a regulation from the model
-        '''
-        
-        if reg in self.regulations:
-            index = self.regulations.index(reg)
-            # check if the regulation type matches
-            if self.regulation_types[index] == reg_type:
-                self.regulations.pop(index)
-                self.regulation_types.pop(index)
-        else: 
-            raise ValueError(f'Regulation {reg} {reg_type} not found in the model spec')
-            
-    def add_regulation(self, reg, reg_type):
-        
-        '''
-        adds a regulation to the model
-        '''
-        
-        if reg not in self.regulations:
-            self.regulations.append(reg)
-            self.regulation_types.append(reg_type)
-        else: 
-            raise ValueError(f'Regulation {reg} already exists in the model spec')
+        return self.feedback_regulations.copy()

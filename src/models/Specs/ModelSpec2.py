@@ -1,110 +1,160 @@
 import numpy as np
-from ..Utils import *
+import logging
+from ..ArchtypeCollections import create_archtype_michaelis_menten, michaelis_menten
+from ..ReactionArchtype import ReactionArchtype
+from ..ModelBuilder import ModelBuilder
+from ..Reaction import Reaction
+from .Regulation import Regulation
+from .Drug import Drug
 
-class ModelSpecification:
-
-    def __init__(self, num_species_layers=3):
+class ModelSpec2:
+    def __init__(self, num_intermediate_layers=3):
         '''
+        Initialize the ModelSpecification class with attributes for Drugs, Receptors, Intermediate Layers, and Outcomes.
+        ModelSpec2 will automatically handle drug interactions 
+        '''
+        # Initialize drugs, receptors, and outcomes
+        self.drugs = []
+        self.receptors = []
+        self.outcomes = []
+
+        # Dynamically generate intermediate layers
+        self.intermediate_layers = [[] for _ in range(num_intermediate_layers)]
         
-        '''
-        self.specie_layers = num_species_layers
-        for i in range(self.specie_layers): 
-            
         self.regulations = []
-        self.regulation_types = []
         self.randomise_parameters = True
-        
-    def __str__(self):
-        # return a string representation of the object, which is its current states 
-        return f'A Species: {self.A_species}\n' + \
-                f'B Species: {self.B_species}\n' + \
-                f'C Species: {self.C_species}\n' + \
-                f'Regulations: {self.regulations}\n' + \
-                f'Regulation Types: {self.regulation_types}\n'
 
-    def generate_specifications(self, random_seed, NA, NR, verbose=1):
+        self.drugs = []
+        self.drug_values = {}
+    
+    def get_all_species(self, include_drugs=True, include_receptors=True, include_outcomes=True):
+        '''
+        Returns a list of all species in the model, including drugs, receptors, intermediate layers, and outcomes.
+        '''
+        all_species = []
+        if include_drugs:
+            all_species.extend(self.drugs)
+        if include_receptors:
+            all_species.extend(self.receptors)
+        for layer in self.intermediate_layers:
+            all_species.extend(layer)
+        if include_outcomes:
+            all_species.extend(self.outcomes)
+        return all_species
+    
+    def __str__(self):
+        pass 
+    
+    def add_drug(self, drug: Drug, value=None):
+        ''' 
+        Adds a drug to the model. 
+        Input: 
+            drug: Drug | The drug to add to the model
+            value: float | if not None, the value of the drug to set in the model
+        '''
+        
+        # drug name is added to species list 
+        self.drugs.append(drug)
+        if value is not None: 
+            self.drug_values[drug.name] = value
+        else: 
+            self.drug_values[drug.name] = drug.default_value
+        
+        # update regulations based on species
+        for i in range(len(drug.regulation)): 
+            specie = drug.regulation[i]
+            type = drug.regulation_type[i]
+            all_species = self.get_all_species(include_drugs=False, include_outcomes=False)
+            if specie not in all_species: 
+                raise ValueError(f"Drug model not compatible: Specie {specie} not found in the model")
+            if type != 'up' and type != 'down': 
+                raise ValueError(f"Drug model not compatible: Regulation type must be either 'up' or 'down'")
+            
+            reg = Regulation(from_specie=drug.name, to_specie=specie, reg_type=type)
+            self.regulations.append(reg)
+            
+
+    def generate_specifications(self, num_cascades, num_regulations, random_seed=None, verbose=1):
+        '''
+        Extend the generate_specifications method to include the D -> R -> Intermediate -> O architecture.
+        '''
+        
+        logger = logging.getLogger(__name__)
+        logger.debug('--- Generating D -> R -> Intermediate -> O architecture ---')
+        logger.debug(f'Drugs: {self.drugs}')
+        logger.debug(f'Receptors: {self.receptors}')
+        logger.debug(f'Intermediate Layers: {self.intermediate_layers}')
+        logger.debug(f'Outcomes: {self.outcomes}')
+            
         # systematically generate C specie regulations insead of defining varialbles for each type of regulation
         random_seed_number = random_seed  # None if do not want to fix the seed
         if random_seed_number is not None:
             rng = np.random.default_rng(random_seed_number)
             
-        if verbose == 1:
-            print('--- Generating a random network ---')
-            print(f'Random Seed: {random_seed_number}')
-            print(f'Number of A Species: {NA}')
-            print(f'Number of B Species: {NA}')
-            print(f'Number of C Species: 1')
-            print(f'Number of Regulations: {NR}')
-            print('\n')
-
-        # based on the `NA` parameter, create a number of species for A
-
-        A_species = [f'A{i}' for i in range(NA)]
-        B_species = [f'B{i}' for i in range(NA)]
-        C_species = ['C']
-
-        self.A_species = A_species
-        self.B_species = B_species
-        self.C_species = C_species
+        logger.debug('--- Generating a random network ---')
+        logger.debug(f'Random Seed: {random_seed_number}')
+        logger.debug(f'Number of cascades: {num_cascades}')
+        logger.debug(f'Number of Regulations: {num_regulations}')
+        logger.debug('\n')
+  
+        # based on the number of cascades, generate the species, index from 1
+        self.receptors = [f'R{i+1}' for i in range(num_cascades)]
+        self.intermediate_layers = [[f'I{i+1}_{j+1}' for j in range(num_cascades)] for i in range(len(self.receptors))]
+        # there should only be one outcome in this spec 
+        self.outcomes = ['O']
         
-        # based on the number of NR, create random connections between any two species in the network
-        regulation_types_choice = ['up', 'down']
-        regulations = []
-        reg_types = []
 
-        all_species = A_species + B_species + C_species
-        B_and_C = B_species + C_species
-
-        # max attempts is the permutation of specie C and B * 100
-        max_attempt = len(B_and_C)**2 * 100
-        current_attempt = 0
-        while len(regulations) < NR and current_attempt < max_attempt:
-            from_specie = str(rng.choice(B_and_C))
-            to_specie = str(rng.choice(all_species))
-            reg = (from_specie, to_specie)
-            reverse_reg = (to_specie, from_specie)
-
-            # also exclude self-regulations and B -> C regulations
-            if from_specie == to_specie or (from_specie in B_species and to_specie in C_species):
-                continue
-
-            if reg not in regulations and reverse_reg not in regulations:
-                reg_type = str(rng.choice(regulation_types_choice))
-                regulations.append(reg)
-                reg_types.append(reg_type)
-
-        if current_attempt == max_attempt:
-            print('Failed to generate the network in the given number of attempts, max attempt:', max_attempt)
-            exit(1)
-
-        for i, reg in enumerate(regulations):
-            if verbose == 1:
-                print(f'Feedback Regulation {i}: {reg} - {reg_types[i]}')
-
-        # each Ap index affects every B -> Bp reaction index
-        for i in range(NA):
-            regulations.append((f'A{i}', f'B{i}'))
-            reg_types.append('up')
-            if verbose == 1:
-                print(f'A to B Stimulation {i+NR}: {f"A{i}"} - {f"B{i}"} - up')
-                
-        stimulator_number = rng.integers(0, len(B_species)+1)
-        inhibitor_number = len(B_species) - stimulator_number
-        # generate b to c regulations
-        for i in range(stimulator_number):
-            regulations.append((f'B{i}', 'C'))
-            reg_types.append('up')
-            if verbose == 1:
-                print(f'B to C Stimulation {i+NR+NA}: {f"B{i}"} - C - up')
-        for i in range(inhibitor_number):
-            regulations.append((f'B{stimulator_number+i}', 'C'))
-            reg_types.append('down')
-            if verbose == 1:
-                print(f'B to C Inhibition {i+NR+NA+stimulator_number}: {f"B{i}"} - C - down')
-
-        self.regulations = regulations
-        self.regulation_types = reg_types
-
+        # first generate default regulations between receptors, intermediate layers, and outcomes using
+        # the Regulation class
+        for i in range(len(self.receptors)):
+            # Recaptor i will regulate I1_i 
+            reg = Regulation(from_specie=self.receptors[i], to_specie=self.intermediate_layers[0][i], reg_type='up')
+            self.regulations.append(reg)
+        # based on the number of intermediate layers, generate the regulations between them
+        for i in range(len(self.intermediate_layers) - 1):
+            for j in range(len(self.intermediate_layers[i])):
+                # Intermediate layer i will regulate Intermediate layer i+1
+                reg = Regulation(from_specie=self.intermediate_layers[i][j], to_specie=self.intermediate_layers[i+1][j], reg_type='up')
+                self.regulations.append(reg)
+        # finally, the last intermediate layer will regulate the outcome
+        for i in range(len(self.intermediate_layers[-1])):
+            reg = Regulation(from_specie=self.intermediate_layers[-1][i], to_specie=self.outcomes[0], reg_type='up')
+            self.regulations.append(reg)
+            
+        # finally, based on num_regulations, generate regulations between different species, but outcome 
+        # should not be regulating other species
+        all_species = self.get_all_species(include_drugs=False, include_outcomes=False)
+        for _ in range(num_regulations):
+            # randomly select two species to regulate each other
+            species1 = rng.choice(all_species)
+            species2 = rng.choice(all_species)
+            reg_type = rng.choice(['up', 'down'])
+            reg = Regulation(from_specie=species1, to_specie=species2, reg_type=reg_type)
+            total_species = len(all_species)
+            max_iterations = total_species * 10  # arbitrary large number to avoid infinite loop
+            num_iterations = 0
+            # while loop to ensure that the two species are not the same and the regulation doesn't already exist
+            while (species1 == species2 or reg in self.regulations) and num_iterations < max_iterations:
+                if species1 == species2:
+                    # randomly select a new species if they are the same
+                    species2 = rng.choice(all_species)
+                else:
+                    # if they are different, check if the regulation already exists
+                    if reg in self.regulations:
+                        # if it exists, randomly select a new species
+                        species1 = rng.choice(all_species)
+                        species2 = rng.choice(all_species)
+                        reg = Regulation(from_specie=species1, to_specie=species2, reg_type=reg_type)
+                num_iterations += 1
+            # if we reach here, we have found two different species to regulate each other
+            if num_iterations >= max_iterations:
+                # throw an error if we cannot find two different species
+                raise ValueError("Could not find two different species to regulate each other. Max iterations reached.", max_iterations)
+            
+            self.regulations.append(reg)
+        logger.debug(f'Generated Regulations: {self.regulations}')
+        
+    ### Helpers 
     def generate_archtype_and_regulators(self, specie):
 
         all_regulations = self.regulations
@@ -176,106 +226,15 @@ class ModelSpecification:
         if random_seed is not None:
             rng = np.random.default_rng(random_seed)
         
-        # convert a list of species to a tuple of species
-        B_species_tuple_phos = []
-        for b in self.B_species:
-            b_specie_phos = b + 'p'
-            B_species_tuple_phos.append(b_specie_phos)
-
-        B_species_tuple_phos = tuple(B_species_tuple_phos)
-
-        '''A Specie reactions'''
-        for specie in self.A_species:
-
-            # create the rate law for the specie
-            rate_law, regulators = self.generate_archtype_and_regulators(specie)
-
-            # generate a random set of parameters for reaction A -> Ap
-            r_params = michaelis_menten.assume_parameters_values.values()
-            if self.randomise_parameters:
-                r_params = self.generate_random_parameters(michaelis_menten, rangeScale_params, rangeMultiplier_params, random_seed=random_seed)
-
-            # add the reaction Ap -> A to the model
-            model.add_reaction(Reaction(michaelis_menten, (specie+'p',), (specie,), parameters_values=tuple(r_params), zero_init=False))
-
-            # generate a random initial value for A
-            random_mean = rng.integers(mean_range_species[0], mean_range_species[1])
-
-            # generate a random set of parameters for reaction Ap -> A
-            r_params_reverse = rate_law.assume_parameters_values.values()
-            if self.randomise_parameters:
-                r_params_reverse = self.generate_random_parameters(rate_law, rangeScale_params, rangeMultiplier_params, random_seed=random_seed)
-
-            # add the reaction Ap -> A to the model
-            model.add_reaction(Reaction(rate_law, (specie,), (specie+'p',),
-                                        reactant_values=random_mean,
-                                        extra_states=regulators,
-                                        parameters_values=tuple(r_params_reverse), zero_init=False))
-
-        '''B Specie reactions'''
-
-        for specie in self.B_species:
-            # create the rate law for the specie
-            rate_law, regulators = self.generate_archtype_and_regulators(specie)
-
-            # generate a random set of parameters for reaction Bp -> B
-            r_params = michaelis_menten.assume_parameters_values.values()
-            if self.randomise_parameters:
-                r_params = self.generate_random_parameters(michaelis_menten, rangeScale_params, rangeMultiplier_params, random_seed=random_seed)
-
-            # add the reaction Bp -> B to the model
-            model.add_reaction(Reaction(michaelis_menten, (specie+'p',), (specie,),
-                                        parameters_values=tuple(r_params), zero_init=False))
-
-            # generate a random initial value for B
-            random_mean = rng.integers(mean_range_species[0], mean_range_species[1])
-
-            # generate a random set of parameters for reaction B -> Bp
-            r_params_reverse = rate_law.assume_parameters_values.values()
-            if self.randomise_parameters:
-                r_params_reverse = self.generate_random_parameters(rate_law, rangeScale_params, rangeMultiplier_params, random_seed=random_seed)
-
-            # add the reaction B -> Bp to the model
-            model.add_reaction(Reaction(rate_law, (specie,), (specie+'p',),
-                                        reactant_values=random_mean,
-                                        extra_states=regulators,
-                                        parameters_values=tuple(r_params_reverse), zero_init=False))
+        # generate reaction classes layer by layer, starting from receptors
+        # reactions are in the form of R1->R1a (which is an activation of R1)
+        for receptor in self.receptors:
+            # forward reaction
+            rate_law, regulators = self.generate_archtype_and_regulators(receptor)
             
-        '''C Specie reactions'''
-        C_specie = 'C'    
-        rate_law, regulators = self.generate_archtype_and_regulators(C_specie)
         
-        # generate a random set of parameters for reaction C -> Cp, using the rate law
-        c_params = rate_law.assume_parameters_values.values()
-        if self.randomise_parameters:
-            c_params = self.generate_random_parameters(rate_law, rangeScale_params, rangeMultiplier_params, random_seed=random_seed)
-            
-        # add the reaction C -> Cp to the model
-        model.add_reaction(Reaction(rate_law, (C_specie,), (C_specie+'p',),
-                                    extra_states=regulators, parameters_values=tuple(c_params), zero_init=False))
-        
-        # generate a random set of parameters for reaction Cp -> C, using the michaelis menten rate law
-        r_params_reverse = michaelis_menten.assume_parameters_values.values()
-        if self.randomise_parameters:
-            r_params_reverse = self.generate_random_parameters(michaelis_menten, rangeScale_params, rangeMultiplier_params, random_seed=random_seed)
-            
-        # add the reaction Cp -> C to the model
-        model.add_reaction(Reaction(michaelis_menten, (C_specie+'p',), (C_specie,),
-                                    reactant_values=0, product_values=100,
-                                    parameters_values=tuple(r_params_reverse), zero_init=False))
         
         model.precompile()
-        # add stimulation reactions
-        if verbose == 1:
-            print('Model States: ', len(model.states))
-            print('Model Parameters: ', len(model.parameters))
-            print('Model Reactions: ', len(model.reactions))
-            print('\n')
-            print('--- Antimony Model ---')
-            print('\n')
-            print(model.get_antimony_model())
-            print('\n')
-
         return model
     
     def get_regulations(self):

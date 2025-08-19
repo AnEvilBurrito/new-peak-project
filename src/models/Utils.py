@@ -1,7 +1,7 @@
-from models.ModelBuilder import ModelBuilder
-from models.Reaction import Reaction
-from models.ReactionArchtype import ReactionArchtype
-from models.ArchtypeCollections import *
+from .ModelBuilder import ModelBuilder
+from .Reaction import Reaction
+from .ReactionArchtype import ReactionArchtype
+from .ArchtypeCollections import *
 from dataclasses import dataclass
 
 
@@ -986,5 +986,3 @@ def systematic_specie_pruning(old_model_spec: ModelSpecification, old_model: Mod
     Prune the model by removing `specie_number` number of species from the model_spec randomly. The remaining model will have at least one specie in A and B which are connected by a regulation, and one specie in C.
     '''
     pass
-        
-    

@@ -402,6 +402,16 @@ def create_archtype_mass_action(
         reverse_rate_law=rev_rate_law)
 
 
+
+def create_archtype_michaelis_menten_v2(stimulators=0, stimulator_weak=0, allosteric_inhibitors=0, competitive_inhibitors=0): 
+    '''
+    WARNING: v2 currently only supports stimulator_weak and competitive_inhibitors
+    This v2 version updates the formulation of the stimulators and inhibitors to focus on the Km  
+    '''
+    pass
+
+
+
 def create_archtype_michaelis_menten(stimulators=0, stimulator_weak=0, allosteric_inhibitors=0, competitive_inhibitors=0):
 
     if stimulators + allosteric_inhibitors + competitive_inhibitors + stimulator_weak == 0:

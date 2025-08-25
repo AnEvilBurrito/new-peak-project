@@ -30,8 +30,8 @@ def initialise_config(folder_name: str, verbose: int = 0) -> None:
         # make 'data' and 'figures' subfolders
         os.makedirs(os.path.join(folder_path, 'data'), exist_ok=True)
         os.makedirs(os.path.join(folder_path, 'figures'), exist_ok=True)
-    if verbose > 0:
-        print(f"Created folder structure at {folder_path}")
+        if verbose > 0:
+            print(f"Created folder structure at {folder_path}")
     else: 
         if verbose > 0:
             print(f"Folder {folder_path} already exists. No changes made.")
@@ -136,3 +136,12 @@ def clear_data_and_figure(notebook_config: dict, data: bool = True, figure: bool
                 os.remove(os.path.join(figures_path, file))
         if verbose > 0:
             print(f"Cleared figure files for version {config_version} in {figures_path}")
+            
+def print_config(d, indent=0):
+    for key, value in d.items():
+        print(" " * indent + str(key) + ":", end=" ")
+        if isinstance(value, dict):
+            print()
+            print_config(value, indent + 2)
+        else:
+            print(str(value))

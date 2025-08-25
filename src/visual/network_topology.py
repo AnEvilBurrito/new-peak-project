@@ -89,7 +89,8 @@ def visualise_network(layers, regulations, feedback_regulations=None):
     plt.title("Regulatory Network with Feedback Highlighting", fontsize=14)
     plt.axis('off')
     plt.tight_layout()
-    plt.show()
+    return plt.gcf()
+    # plt.show()  # Uncomment if running interactively
     
 
 def calculate_positions_2(layers):
@@ -196,7 +197,7 @@ def visualise_network_2(layers, regulations, feedback_regulations=None):
             arrowstyle=arrowstyle,
             arrowsize=25 if data['regulation_type'] == 'up' else 10,
             node_size=2500,
-            min_target_margin=15,
+            min_target_margin=15 if data['regulation_type'] == 'up' else 27,
             connectionstyle=f"arc3,rad={str(rad)}"
         )
 
@@ -208,7 +209,8 @@ def visualise_network_2(layers, regulations, feedback_regulations=None):
     plt.title("Regulatory Network Visualization", fontsize=14)
     plt.axis('off')
     plt.tight_layout()
-    plt.show()
+    return plt.gcf()
+    # plt.show()  # Uncomment if running interactively
     
 
 ## Usage example with your parameters

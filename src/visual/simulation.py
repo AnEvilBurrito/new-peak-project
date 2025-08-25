@@ -86,4 +86,5 @@ def visualise_simulation(df, columns=None, activated_only=False, outcome_activat
         plt.legend(title='Species', bbox_to_anchor=(1.05, 1), loc='upper left')
     
     plt.tight_layout()
-    plt.show()
+    # return final figure
+    return plt.gcf()

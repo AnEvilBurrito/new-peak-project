@@ -1,7 +1,7 @@
 from .ModelBuilder import ModelBuilder
 from .Reaction import Reaction
 from .ReactionArchtype import ReactionArchtype
-from .ArchtypeCollections import *
+from .ArchtypeCollections import michaelis_menten, create_archtype_michaelis_menten
 from dataclasses import dataclass
 
 
@@ -52,7 +52,7 @@ class ModelSpecification:
             print(f'Random Seed: {random_seed_number}')
             print(f'Number of A Species: {NA}')
             print(f'Number of B Species: {NA}')
-            print(f'Number of C Species: 1')
+            print('Number of C Species: 1')
             print(f'Number of Regulations: {NR}')
             print('\n')
 
@@ -153,7 +153,7 @@ class ModelSpecification:
             print(f'Random Seed: {random_seed_number}')
             print(f'Number of A Species: {NA}')
             print(f'Number of B Species: {NA}')
-            print(f'Number of C Species: 1')
+            print('Number of C Species: 1')
             print(f'Number of Regulations: {NR}')
             print('\n')
 

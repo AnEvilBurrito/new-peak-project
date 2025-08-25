@@ -70,7 +70,7 @@ class ModelSpec2:
             if specie not in all_species: 
                 raise ValueError(f"Drug model not compatible: Specie {specie} not found in the model")
             if type != 'up' and type != 'down': 
-                raise ValueError(f"Drug model not compatible: Regulation type must be either 'up' or 'down'")
+                raise ValueError("Drug model not compatible: Regulation type must be either 'up' or 'down'")
             
             reg = Regulation(from_specie=drug.name, to_specie=specie, reg_type=type)
             self.regulations.append(reg)
@@ -139,7 +139,7 @@ class ModelSpec2:
             reg = Regulation(from_specie=self.intermediate_layers[-1][i], to_specie=self.outcomes[0], reg_type='up')
             self.regulations.append(reg)
             
-        logger.debug(f'Generated Ordinary Regulations:')
+        logger.debug('Generated Ordinary Regulations:')
         for reg in self.regulations:
             logger.debug(f'From {reg.from_specie} to {reg.to_specie} of type {reg.reg_type}')
             
@@ -147,7 +147,7 @@ class ModelSpec2:
         # should not be regulating other species
         all_species = self.get_all_species(include_drugs=False, include_outcomes=False)
         # at this point, all regulations should be only the ordinary regulations
-        all_regulations = [(reg.from_specie, reg.to_specie) for reg in self.regulations]
+        # all_regulations = [(reg.from_specie, reg.to_specie) for reg in self.regulations]
         self.ordinary_regulations = self.regulations.copy()
         feedback_regulations = []
         
@@ -188,7 +188,7 @@ class ModelSpec2:
         # add the feedback regulations to the model
         self.feedback_regulations = feedback_regulations
         self.regulations.extend(feedback_regulations)
-        logger.debug(f'Generated Feedback Regulations:')
+        logger.debug('Generated Feedback Regulations:')
         for reg in feedback_regulations:
             logger.debug(f'From {reg.from_specie} to {reg.to_specie} of type {reg.reg_type}')
         

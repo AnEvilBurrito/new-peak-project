@@ -7,11 +7,11 @@ from ..Reaction import Reaction
 from .Regulation import Regulation
 from .Drug import Drug
 
-class ModelSpec2:
+class ModelSpec3:
     def __init__(self, num_intermediate_layers=2):
         '''
         Initialize the ModelSpecification class with attributes for Drugs, Receptors, Intermediate Layers, and Outcomes.
-        ModelSpec2 will automatically handle drug interactions 
+        ModelSpec3 will automatically handle drug interactions 
         '''
         # Initialize drugs, receptors, and outcomes
         self.drugs = []
@@ -193,35 +193,51 @@ class ModelSpec2:
             logger.debug(f'From {reg.from_specie} to {reg.to_specie} of type {reg.reg_type}')
         
     ### Helpers 
-    def generate_archtype_and_regulators(self, specie):
-
+    def generate_forward_archtype_and_regulators(self, specie):
         all_regulations = [(reg.from_specie, reg.to_specie) for reg in self.regulations]
-        all_regulation_types = [reg.reg_type for reg in self.regulations]            
+        all_regulation_types = [reg.reg_type for reg in self.regulations]
         regulators_for_specie = []
         for i, reg in enumerate(all_regulations):
             if reg[1] == specie:
                 reg_type = all_regulation_types[i]
-                regulators_for_specie.append((reg[0], reg_type))
+                if reg_type == 'up':
+                    regulators_for_specie.append((reg[0], reg_type))
 
         if len(regulators_for_specie) == 0:
             return michaelis_menten, ()
 
-        total_up_regulations = len([r for r in regulators_for_specie if r[1] == 'up'])
-        total_down_regulations = len([r for r in regulators_for_specie if r[1] == 'down'])
+        total_up_regulations = len(regulators_for_specie)
 
         rate_law = create_archtype_michaelis_menten(stimulators=0,
                                                     stimulator_weak=total_up_regulations,
                                                     allosteric_inhibitors=0,
-                                                    competitive_inhibitors=total_down_regulations)
+                                                    competitive_inhibitors=0)
 
-        # sort the regulators by type, up first and down second
-        regulators_for_specie = sorted(regulators_for_specie, key=lambda x: x[1], reverse=True)
         regulators_sorted = [r[0] for r in regulators_for_specie]
+        return rate_law, regulators_sorted
 
-        # print(f'Sorted regulators information: {regulators_for_specie}')
-        # print(f'Final regulators for {specie}: {regulators_sorted_phos}')
-        # print(f'Rate law for {specie}: {rate_law}')
-        return rate_law, regulators_sorted                                            
+    def generate_reverse_archtype_and_regulators(self, specie):
+        all_regulations = [(reg.from_specie, reg.to_specie) for reg in self.regulations]
+        all_regulation_types = [reg.reg_type for reg in self.regulations]
+        regulators_for_specie = []
+        for i, reg in enumerate(all_regulations):
+            if reg[1] == specie:
+                reg_type = all_regulation_types[i]
+                if reg_type == 'down':
+                    regulators_for_specie.append((reg[0], reg_type))
+
+        if len(regulators_for_specie) == 0:
+            return michaelis_menten, ()
+
+        total_down_regulations = len(regulators_for_specie)
+
+        rate_law = create_archtype_michaelis_menten(stimulators=0,
+                                                    stimulator_weak=total_down_regulations,
+                                                    allosteric_inhibitors=0,
+                                                    competitive_inhibitors=0)
+
+        regulators_sorted = [r[0] for r in regulators_for_specie]
+        return rate_law, regulators_sorted
 
     # generate random parameters informed by a scale
     def generate_random_parameters(self, reaction_archtype: ReactionArchtype, scale_range, multiplier_range, random_seed=None):
@@ -298,22 +314,36 @@ class ModelSpec2:
         return model
 
     def get_forward_reaction(self, specie, mean_range_species, rangeScale_params, rangeMultiplier_params, rng):
-        forward_rate_law, regulators = self.generate_archtype_and_regulators(specie)
+        forward_rate_law, regulators = self.generate_forward_archtype_and_regulators(specie)
+        activated_regulators = []
+        for r in regulators: 
+            if 'D' in r: # drug does not get activated, #TODO: make this more general, currently only works for 'D' as drug
+                activated_regulators.append(r)
+            else:
+                activated_regulators.append(r + 'a')
         forward_params = self.generate_random_parameters(forward_rate_law, rangeScale_params, rangeMultiplier_params, rng)
         forward_state_val = rng.integers(mean_range_species[0], mean_range_species[1])
-        forward_reaction = Reaction(forward_rate_law, 
-                                        (specie,), (specie + 'a',), 
+        forward_reaction = Reaction(forward_rate_law,
+                                        (specie,), (specie + 'a',),
                                         reactant_values=forward_state_val,
-                                        extra_states=regulators,
-                                        parameters_values=tuple(forward_params), 
+                                        extra_states=activated_regulators,
+                                        parameters_values=tuple(forward_params),
                                         zero_init=False)
         return forward_reaction
 
     def get_reverse_reaction(self, specie, rangeScale_params, rangeMultiplier_params, rng):
-        reverse_params = self.generate_random_parameters(michaelis_menten, rangeScale_params, rangeMultiplier_params, rng)
-        reverse_reaction = Reaction(michaelis_menten, 
-                                         (specie + 'a',), (specie,), 
-                                         parameters_values=tuple(reverse_params), 
+        reverse_rate_law, regulators = self.generate_reverse_archtype_and_regulators(specie)
+        activated_regulators = []
+        for r in regulators:
+            if 'D' in r:
+                activated_regulators.append(r)
+            else:
+                activated_regulators.append(r + 'a')
+        reverse_params = self.generate_random_parameters(reverse_rate_law, rangeScale_params, rangeMultiplier_params, rng)
+        reverse_reaction = Reaction(reverse_rate_law,
+                                         (specie + 'a',), (specie,),
+                                         extra_states=activated_regulators,
+                                         parameters_values=tuple(reverse_params),
                                          zero_init=False)
         return reverse_reaction
     

@@ -5,6 +5,12 @@ from models.Solver.Solver import Solver
 import warnings
 import numpy as np
 
+
+'''
+WARNING: This is a deprecated form of sensitivity analysis. Please use the new sensitivity analysis module in src/utils/sensitivity_analysis.py
+    which implements Morris screening and Sobol for global sensitivity analysis.
+'''
+
 def sensitivity_analysis(builder: ModelBuilder, solver: Solver, specie_name: str, specie_range: tuple, simulation_time: float, simulation_step: int):
     all_results = []
     for specie in specie_range:

@@ -17,6 +17,7 @@ dependencies = [
     "python-dotenv>=1.1.0",
     "python-libsbml>=5.20.5",
     "pyyaml>=6.0.2",
+    "salib>=1.5.1",
     "scikit-learn>=1.6.1",
     "scipy>=1.15.3",
     "seaborn>=0.13.2",

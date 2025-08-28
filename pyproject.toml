@@ -25,4 +25,5 @@ dependencies = [
     "sympy>=1.14.0",
     "tables>=3.10.2",
     "tqdm>=4.67.1",
+    "tslearn>=0.6.4",
 ]

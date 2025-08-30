@@ -318,7 +318,9 @@ def generate_target_data_diff_build(model_spec: ModelSpecification,
                             solver: Solver, 
                             feature_df: pd.DataFrame, 
                             parameter_set: list[dict],
-                            simulation_params={'start': 0, 'end': 500, 'points': 100}, n_cores=1, verbose=False):
+                            simulation_params={'start': 0, 'end': 500, 'points': 100}, 
+                            outcome_var='Cp',
+                            n_cores=1, verbose=False):
     '''
     Generate the target data for the model, using different parameter sets 
         model_spec: ModelSpecification object   
@@ -360,8 +362,8 @@ def generate_target_data_diff_build(model_spec: ModelSpecification,
         # on the very next call to simulate, it will reset the model to the original state
         res = solver.simulate(start, end, points) 
         # locate the Cp value in the dataframe
-        Cp = res['Cp'].iloc[-1]
-        time_course = res['Cp'].values
+        Cp = res[outcome_var].iloc[-1]
+        time_course = res[outcome_var].values
         return Cp, time_course
 
     # use parallel processing to speed up the simulation
@@ -384,7 +386,7 @@ def generate_target_data_diff_build(model_spec: ModelSpecification,
             except Exception as e:
                 print(f'Error simulating perturbation {i}: {e}')
             
-    target_df = pd.DataFrame(all_perturbed_results, columns=['Cp'])
+    target_df = pd.DataFrame(all_perturbed_results, columns=[outcome_var])
     return target_df, time_course_data
 
 
@@ -618,7 +620,12 @@ def generate_model_timecourse_data_diff_build(model_spec: ModelSpecification, so
     output_df = pd.DataFrame(all_outputs)
     return output_df
 
-def generate_model_timecourse_data(model_spec: ModelSpecification, solver: Solver, feature_df: pd.DataFrame, simulation_params={'start': 0, 'end': 500, 'points': 100}, capture_species='all', n_cores=1, verbose=False):
+def generate_model_timecourse_data(model_spec: ModelSpecification, 
+                                   solver: Solver, 
+                                   feature_df: pd.DataFrame, 
+                                   simulation_params={'start': 0, 'end': 500, 'points': 100}, 
+                                   capture_species='all', 
+                                   n_cores=1, verbose=False):
     # validate the simulation parameters
     if 'start' not in simulation_params or 'end' not in simulation_params or 'points' not in simulation_params:
         raise ValueError(
@@ -689,3 +696,128 @@ def generate_model_timecourse_data(model_spec: ModelSpecification, solver: Solve
 
     output_df = pd.DataFrame(all_outputs)
     return output_df
+
+
+def generate_model_timecourse_data_v3(all_species: dict,
+                                   solver: Solver, 
+                                   feature_df: pd.DataFrame, 
+                                   simulation_params={'start': 0, 'end': 500, 'points': 100}, 
+                                   n_cores=1, verbose=False):
+    # validate the simulation parameters
+    if 'start' not in simulation_params or 'end' not in simulation_params or 'points' not in simulation_params:
+        raise ValueError(
+            'Simulation parameters must contain "start", "end" and "points" keys')
+
+    def simulate_perturbation(i):
+        # Reset rr model and simulate with each perturbation
+        perturbed_values = feature_df.iloc[i]
+
+        # convert the perturbed values to a dictionary
+        perturbed_values = perturbed_values.to_dict()
+
+        # set the perturbed values into solver
+        solver.set_state_values(perturbed_values)
+
+        # simulate the model and grab only the C and Cp values at the end
+        start, end, points = simulation_params['start'], simulation_params['end'], simulation_params['points']
+        res = solver.simulate(start, end, points)
+        output = {}
+        for s in all_species.keys():
+            output[s] = res[s].values
+        return output
+
+    # use parallel processing to speed up the simulation
+    if n_cores > 1 or n_cores == -1:
+        results = Parallel(n_jobs=n_cores)(delayed(simulate_perturbation)(i) for i in tqdm(range(feature_df.shape[0]), desc='Simulating perturbations', disable=not verbose))
+        all_outputs = list(results)
+    else:
+        # iterate the dataframe and simulate each perturbation
+        all_outputs = []
+        # iterate the dataframe and simulate each perturbation
+        for i in tqdm(range(feature_df.shape[0]), desc='Simulating perturbations', disable=not verbose):
+            output = {}
+
+            # Reset rr model and simulate with each perturbation
+            perturbed_values = feature_df.iloc[i]
+
+            # convert the perturbed values to a dictionary
+            perturbed_values = perturbed_values.to_dict()
+
+            # set the perturbed values into solver
+            solver.set_state_values(perturbed_values)
+
+            # simulate the model and grab only the C and Cp values at the end
+            start, end, points = simulation_params['start'], simulation_params['end'], simulation_params['points']
+            res = solver.simulate(start, end, points)
+            for s in all_species.keys():
+                output[s] = res[s].values
+            all_outputs.append(output)
+
+    output_df = pd.DataFrame(all_outputs)
+    return output_df
+
+
+def generate_model_timecourse_data_diff_build_v3(all_species: dict, 
+                                                 solver: Solver, 
+                                                 feature_df: pd.DataFrame, 
+                                                 parameter_set: list[dict], 
+                                                 simulation_params={'start': 0, 'end': 500, 'points': 100}, 
+                                                 capture_species='all', n_cores=1, verbose=False):
+    '''
+    Generate the time course data for the model, using different parameter sets 
+        model_spec: ModelSpecification object   
+        solver: Solver object, either ScipySolver or RoadrunnerSolver
+        feature_df: dataframe of perturbed values
+        parameter_set: list of dicts, each dict contains the parameters to set in the solver
+        simulation_params: dict of parameters for the simulation, for
+            'start': float, the start time of the simulation
+            'end': float, the end time of the simulation
+            'points': int, the number of points to simulate
+        capture_species: str or list of str, species to capture in the output, if 'all', captures all species
+    Returns:
+        output_df: dataframe of the time course data for each perturbation
+    '''
+    # validate the simulation parameters
+    if 'start' not in simulation_params or 'end' not in simulation_params or 'points' not in simulation_params:
+        raise ValueError('Simulation parameters must contain "start", "end" and "points" keys')
+    
+    def simulate_perturbation(i):
+        # Reset rr model and simulate with each perturbation
+        perturbed_values = feature_df.iloc[i]
+        params = parameter_set[i]
+
+        # convert the perturbed values to a dictionary
+        perturbed_values = perturbed_values.to_dict()
+        
+        # set the perturbed values into solver 
+        solver.set_state_values(perturbed_values)
+        # set the parameters into solver
+        solver.set_parameter_values(params)
+
+        # simulate the model and grab only the C and Cp values at the end
+        start, end, points = simulation_params['start'], simulation_params['end'], simulation_params['points']
+        res = solver.simulate(start, end, points) 
+        output = {}
+        for s in all_species.keys():
+            output[s] = res[s].values
+        return output
+
+    # use parallel processing to speed up the simulation
+    if n_cores > 1 or n_cores == -1:
+        results = Parallel(n_jobs=n_cores)(delayed(simulate_perturbation)(i) for i in tqdm(range(feature_df.shape[0]), desc='Simulating perturbations', disable=not verbose))
+        all_outputs = list(results)
+    else:
+        # iterate the dataframe and simulate each perturbation
+        all_outputs = []
+        # iterate the dataframe and simulate each perturbation
+        for i in tqdm(range(feature_df.shape[0]), desc='Simulating perturbations', disable=not verbose):
+            try:
+                output = simulate_perturbation(i)
+                all_outputs.append(output)
+            except Exception as e:
+                print(f'Error simulating perturbation {i}: {e}')
+
+    output_df = pd.DataFrame(all_outputs)
+    return output_df
+
+

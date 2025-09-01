@@ -1,9 +1,9 @@
-# src/utils/config_manager.py
-
 import os
 import yaml
 import dotenv
 import matplotlib.pyplot as plt
+import pickle
+import pandas as pd
 
 dotenv.load_dotenv()
 new_path = os.getenv("NEW_DATA_PATH")
@@ -86,7 +86,6 @@ def save_data(notebook_config: dict, data: any, data_name: str, data_format: str
         os.makedirs(data_path, exist_ok=True)
     data_file_path = os.path.join(data_path, f"{config_version}_{data_name}.{data_format}")
     if data_format == 'pkl':
-        import pickle
         with open(data_file_path, 'wb') as f:
             pickle.dump(data, f, **kwargs)
     elif data_format == 'csv':
@@ -96,6 +95,9 @@ def save_data(notebook_config: dict, data: any, data_name: str, data_format: str
             raise ValueError("Data does not have a 'to_csv' method.")
     else:
         raise ValueError("Unsupported data format. Use 'pkl' or 'csv'.")
+    
+    if verbose > 0:
+        print(f"Data saved at {data_file_path}")
     
 
 def clear_data_and_figure(notebook_config: dict, data: bool = True, figure: bool = True, verbose: int = 0) -> None:
@@ -145,3 +147,40 @@ def print_config(d, indent=0):
             print_config(value, indent + 2)
         else:
             print(str(value))
+
+def load_data(notebook_config: dict, data_name: str, data_format: str = 'pkl', verbose: int = 0, **kwargs) -> any:
+    '''
+    Loads data from the appropriate data folder.
+    notebook_config: dict
+        The configuration dictionary containing the folder name.
+        The folder name is accessible via notebook_config['name'].
+        The config version is accessible via notebook_config['version'].
+    data_name: str
+        The name of the data file (without extension).
+    data_format: str
+        The format of the data file ('pkl' or 'csv').
+    **kwargs:
+        Additional keyword arguments to pass to the data loading method.
+    Returns:
+        The loaded data.
+    '''
+    folder_name = notebook_config['name']
+    config_version = notebook_config.get('version', 'v1') # Default to 'v1' if not specified
+    data_path = os.path.join(new_path, folder_name, 'data')
+    data_file_path = os.path.join(data_path, f"{config_version}_{data_name}.{data_format}")
+    
+    if not os.path.exists(data_file_path):
+        raise FileNotFoundError(f"Data file not found: {data_file_path}")
+    
+    if data_format == 'pkl':
+        with open(data_file_path, 'rb') as f:
+            data = pickle.load(f, **kwargs)
+    elif data_format == 'csv':
+        data = pd.read_csv(data_file_path, **kwargs)
+    else:
+        raise ValueError("Unsupported data format. Use 'pkl' or 'csv'.")
+    
+    if verbose > 0:
+        print(f"Data loaded from {data_file_path}")
+    
+    return data

@@ -1,4 +1,10 @@
 {
     "git.ignoreLimitWarning": true,
-    "python.analysis.logLevel": "Trace"
+    "python.analysis.logLevel": "Trace",
+    "files.exclude": {
+        "**/*.env": true
+    },
+    "search.exclude": {
+        "**/*.env": true
+    }
 }

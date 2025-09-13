@@ -151,9 +151,9 @@ class Reaction:
         if len(self.archtype.assume_parameters_values) > 0: 
             # if the reaction archtype has parameters_values specified, use those
             # to create a dictionary 
-            parameters = {f'{r_index}_{p}': 0 for p in self.archtype.parameters}
+            parameters = {f"{p}_{r_index}": 0 for p in self.archtype.parameters}
             for key, val in self.archtype.assume_parameters_values.items():
-                parameters[f'{r_index}_{key}'] = val
+                parameters[f"{key}_{r_index}"] = val
             
         # override parameters if provided
         if len(self.parameters_values) > 0: 
@@ -161,7 +161,7 @@ class Reaction:
             # it will override the default values
             if isinstance(self.parameters_values, dict):
                 for key, val in self.parameters_values.items():
-                    parameters[f'{r_index}_{key}'] = val
+                    parameters[f"{key}_{r_index}"] = val
             
             else:
                 raise ValueError('parameters_values must be a dictionary or tuple')
@@ -264,7 +264,7 @@ class Reaction:
             if self.exists_linked_parameters():
                 replacement_name = str(self.linked_parameters[i])
             else: 
-                replacement_name = r_index_p + '_' + archtype_name
+                replacement_name = archtype_name + '_' + r_index_p
             # Use regular expression to replace whole words only
             pattern = r'(?<!\w)' + re.escape(archtype_name) + r'(?!\w)'
             rate_law_str = re.sub(pattern, replacement_name, rate_law_str)
@@ -323,7 +323,7 @@ class Reaction:
             if self.exists_linked_parameters():
                 replacement_name = str(self.linked_parameters[i])
             else:
-                replacement_name = r_index_p + '_' + archtype_name
+                replacement_name = archtype_name + "_" + r_index_p
             # Use regular expression to replace whole words only
             pattern = r'(?<!\w)' + re.escape(archtype_name) + r'(?!\w)'
             rate_law_str = re.sub(pattern, replacement_name, rate_law_str)

@@ -338,6 +338,21 @@ class ModelBuilder:
 
         raise Exception('Error in loading antimony model', code)
 
+    def get_sbml_model_from(self, ant_model) -> str:
+        """
+        Doc
+        """
+
+        antimony.clearPreviousLoads()
+        antimony.freeAll()
+        code = antimony.loadAntimonyString(ant_model)
+        if code >= 0:
+            mid = antimony.getMainModuleName()
+            sbml_model = antimony.getSBMLString(mid)
+            return sbml_model
+
+        raise Exception("Error in loading antimony model", code)
+
     def save_antimony_model_as(self, file_name: str):
         '''
         Doc

@@ -88,6 +88,7 @@ class ModelSpec4:
         
         reg = Regulation(from_specie=from_specie, to_specie=to_specie, reg_type=reg_type)
         self.regulations.append(reg)
+        self.feedback_regulations.append(reg)
 
     def generate_specifications(self, num_cascades, num_regulations, random_seed=None, verbose=1):
         '''
@@ -186,7 +187,7 @@ class ModelSpec4:
             feedback_regulations.append(reg)
             
         # add the feedback regulations to the model
-        self.feedback_regulations = feedback_regulations
+        self.feedback_regulations.extend(feedback_regulations)
         self.regulations.extend(feedback_regulations)
         logger.debug('Generated Feedback Regulations:')
         for reg in feedback_regulations:

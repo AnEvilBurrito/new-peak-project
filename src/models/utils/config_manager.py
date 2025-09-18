@@ -63,7 +63,7 @@ def save_figure(notebook_config: dict, fig: plt.Figure, fig_name: str, fig_forma
     if verbose > 0:
         print(f"Figure saved at {fig_path}")
         
-    
+
 def save_data(notebook_config: dict, data: any, data_name: str, data_format: str = 'pkl', verbose: int = 0, **kwargs) -> None:
     '''
     Saves data as a pickled file in the appropriate data folder.
@@ -74,6 +74,9 @@ def save_data(notebook_config: dict, data: any, data_name: str, data_format: str
         The config version is accessible via notebook_config['version'].
     data: any
         The data to be saved. Should have a 'to_csv' method if saving as CSV.
+        Should be a string or have a 'write' method if saving as TXT.
+    data_format: str
+        The format to save the data in, accepted values are 'pkl', 'csv', and 'txt'.
     data_name: str
         The name of the data file (without extension).
     **kwargs:
@@ -85,6 +88,7 @@ def save_data(notebook_config: dict, data: any, data_name: str, data_format: str
     if not os.path.exists(data_path):
         os.makedirs(data_path, exist_ok=True)
     data_file_path = os.path.join(data_path, f"{config_version}_{data_name}.{data_format}")
+    
     if data_format == 'pkl':
         with open(data_file_path, 'wb') as f:
             pickle.dump(data, f, **kwargs)
@@ -93,8 +97,26 @@ def save_data(notebook_config: dict, data: any, data_name: str, data_format: str
             data.to_csv(data_file_path, **kwargs)
         else:
             raise ValueError("Data does not have a 'to_csv' method.")
+    elif data_format == 'txt':
+        # Handle string data
+        if isinstance(data, str):
+            write_mode = kwargs.pop('mode', 'w')  # Allow custom mode, default to write
+            encoding = kwargs.pop('encoding', 'utf-8')  # Allow custom encoding
+            
+            with open(data_file_path, write_mode, encoding=encoding, **kwargs) as f:
+                f.write(data)
+        
+        # Handle objects that can be converted to string
+        elif hasattr(data, '__str__') or hasattr(data, '__repr__'):
+            write_mode = kwargs.pop('mode', 'w')
+            encoding = kwargs.pop('encoding', 'utf-8')
+            
+            with open(data_file_path, write_mode, encoding=encoding, **kwargs) as f:
+                f.write(str(data))
+        else:
+            raise ValueError("Data cannot be converted to text format. Provide a string or string-convertible object.")
     else:
-        raise ValueError("Unsupported data format. Use 'pkl' or 'csv'.")
+        raise ValueError("Unsupported data format. Use 'pkl', 'csv', or 'txt'.")
     
     if verbose > 0:
         print(f"Data saved at {data_file_path}")

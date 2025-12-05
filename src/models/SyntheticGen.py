@@ -18,18 +18,6 @@ from tqdm import tqdm
 from copy import deepcopy
 from joblib import Parallel, delayed
 
-def lhs(n_samples, n_features, random_state=None):
-    """Latin Hypercube Sampling in [0,1]^d"""
-    result = np.empty((n_samples, n_features))
-    rng = np.random.default_rng(random_state)
-    for i in range(n_features):
-        cut = np.linspace(0, 1, n_samples + 1)
-        u = rng.uniform(size=n_samples)
-        points = cut[:-1] + u * (cut[1] - cut[0])
-        rng.shuffle(points)
-        result[:, i] = points
-    return result
-
 
 def generate_feature_data_v3(model_spec: ModelSpecification, initial_values: dict, perturbation_type: str, perturbation_params, n, seed=None):
     '''
@@ -165,7 +153,6 @@ def generate_feature_data(model_spec: ModelSpecification, initial_values: dict, 
         model: roadrunner model object
         perturbation_type: str, the type of perturbation to apply, either 'uniform' or 'gaussian'
         perturbation_params: dict of parameters for the perturbation, for
-            'lhs' perturbation, the params are {'min': float, 'max': float} - lhs is latin hypercube sampling
             'uniform' perturbation, the params are {'min': float, 'max': float}
             'gaussian' perturbation, the param is either {'std': float} or {'rsd': float}
                 'rsd' is the relative standard deviation of the perturbation, i.e. std/mean
@@ -189,34 +176,13 @@ def generate_feature_data(model_spec: ModelSpecification, initial_values: dict, 
 
     all_perturbed_values = []
     all_species = model_spec.A_species + model_spec.B_species
-    # if lhs is selected, generate the samples and scale them
-    if perturbation_type == 'lhs':
-        min_ = perturbation_params['min']
-        max_ = perturbation_params['max']
-        # Generate LHS samples and scale
-        n_features = len(all_species)
-        lhs_samples = lhs(n_samples=n, n_features=n_features)
-        scaled_samples = min_ + lhs_samples * (max_ - min_)
-        feature_df = pd.DataFrame(scaled_samples, columns=all_species)
-        return feature_df
     
     for _ in range(n):
         perturbed_values = {}
-        if perturbation_type == 'lhs':
-            # generate a latin hypercube sample
-            min_ = perturbation_params['min']
-            max_ = perturbation_params['max']
-            for s in model_spec.A_species:
-                perturbed_values[s] = np.random.uniform(min_, max_)
-            for s in model_spec.B_species:
-                perturbed_values[s] = np.random.uniform(min_, max_)
-            all_perturbed_values.append(perturbed_values)
         if perturbation_type == 'uniform':
             min_ = perturbation_params['min']
             max_ = perturbation_params['max']  
-            for s in model_spec.A_species:
-                perturbed_values[s] = initial_values[s] * np.random.uniform(min_, max_)
-            for s in model_spec.B_species:
+            for s in all_species:
                 perturbed_values[s] = initial_values[s] * np.random.uniform(min_, max_)
             all_perturbed_values.append(perturbed_values)
         elif perturbation_type == 'gaussian':
@@ -224,11 +190,8 @@ def generate_feature_data(model_spec: ModelSpecification, initial_values: dict, 
                 sigma = perturbation_params['std']
             elif 'rsd' in perturbation_params:
                 rsd = perturbation_params['rsd']
-                sigma = rsd * initial_values[s]
-            for s in model_spec.A_species:
-                mu = initial_values[s]
-                perturbed_values[s] = np.random.normal(mu, sigma)
-            for s in model_spec.B_species:
+                sigma = rsd * initial_values[all_species[0]]  # Use first species for initial rsd calculation
+            for s in all_species:
                 mu = initial_values[s]
                 perturbed_values[s] = np.random.normal(mu, sigma)
             all_perturbed_values.append(perturbed_values)

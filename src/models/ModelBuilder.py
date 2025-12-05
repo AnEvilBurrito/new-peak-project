@@ -70,9 +70,7 @@ class ModelBuilder:
         
         '''
         parameters = {}
-        i = 0
-        while i < len(self.reactions):
-            r = self.reactions[i]
+        for i, r in enumerate(self.reactions):
             # first, get the parameters names from the archtype
             # and perform naming rule
 
@@ -84,8 +82,6 @@ class ModelBuilder:
             r_index = f'J{i}'
 
             parameters.update(r.get_reaction_parameters(r_index))
-
-            i += 1
 
         return parameters
 
@@ -271,16 +267,13 @@ class ModelBuilder:
         if 'reaction' in self.custom_strings:
             antimony_string += self.custom_strings['reaction']
 
-        i = 0
-        while i < len(self.reactions):
-            r = self.reactions[i]
+        for i, r in enumerate(self.reactions):
             r_index = f'J{i}'
             antimony_string += r.get_antimony_reaction_str(r_index)
             antimony_string += '\n'
             if r.reversible: 
                 antimony_string += r.get_antimony_reactions_reverse_str(r_index)
                 antimony_string += '\n'
-            i += 1
 
         # add state vars
 

@@ -231,17 +231,24 @@ class ModelSpecification:
         all_regulations = self.regulations
         all_regulation_types = self.regulation_types
         
-        regulators_for_specie = []
-        for i, reg in enumerate(all_regulations):
-            if reg[1] == specie:
-                reg_type = all_regulation_types[i]
-                regulators_for_specie.append((reg[0], reg_type))
+        # Build list of regulators for this specie in a single pass
+        regulators_for_specie = [
+            (reg[0], all_regulation_types[i])
+            for i, reg in enumerate(all_regulations)
+            if reg[1] == specie
+        ]
 
         if len(regulators_for_specie) == 0:
             return michaelis_menten, ()
 
-        total_up_regulations = len([r for r in regulators_for_specie if r[1] == 'up'])
-        total_down_regulations = len([r for r in regulators_for_specie if r[1] == 'down'])
+        # Count up and down regulations in a single pass
+        total_up_regulations = 0
+        total_down_regulations = 0
+        for _, reg_type in regulators_for_specie:
+            if reg_type == 'up':
+                total_up_regulations += 1
+            else:
+                total_down_regulations += 1
 
         rate_law = create_archtype_michaelis_menten(stimulators=0,
                                                     stimulator_weak=total_up_regulations,
@@ -250,17 +257,11 @@ class ModelSpecification:
 
         # sort the regulators by type, up first and down second
         regulators_for_specie = sorted(regulators_for_specie, key=lambda x: x[1], reverse=True)
-        regulators_sorted = [r[0] for r in regulators_for_specie]
-        # regulators_sorted_phos = [r[0]+'p' for r in regulators_for_specie]
-        regulators_sorted_modified = []
-        for r in regulators_sorted:
-            if 'D' in r:
-                regulators_sorted_modified.append(r)
-            else:
-                regulators_sorted_modified.append(r+'p')
-        # print(f'Sorted regulators information: {regulators_for_specie}')
-        # print(f'Final regulators for {specie}: {regulators_sorted_phos}')
-        # print(f'Rate law for {specie}: {rate_law}')
+        # Build modified regulators list using list comprehension
+        regulators_sorted_modified = [
+            r[0] if 'D' in r[0] else r[0] + 'p'
+            for r in regulators_for_specie
+        ]
         return rate_law, regulators_sorted_modified
 
 
@@ -808,18 +809,25 @@ def get_dynamic_features(col_data: pd.Series,
                          normalise: bool = True,
                          abs_change_tolerance: float = 0.01) -> list:
     
-    # dynamic features
-    auc = np.trapz(col_data)
-    max_val = np.max(col_data)
-    max_time = np.argmax(col_data)
-    min_val = np.min(col_data)
-    min_time = np.argmin(col_data)
+    # Convert to numpy array for faster operations
+    data_array = col_data.to_numpy()
+    
+    # dynamic features using numpy operations
+    # Use np.trapezoid if available (NumPy >= 2.0), otherwise fall back to np.trapz
+    if hasattr(np, 'trapezoid'):
+        auc = np.trapezoid(data_array)
+    else:
+        auc = np.trapz(data_array)
+    max_val = np.max(data_array)
+    max_time = np.argmax(data_array)
+    min_val = np.min(data_array)
+    min_time = np.argmin(data_array)
 
-    median_val = np.median(col_data)
+    median_val = np.median(data_array)
 
     # calculation of total fold change (tfc)
-    start_val = col_data.iloc[0]
-    end_val = col_data.iloc[-1]
+    start_val = data_array[0]
+    end_val = data_array[-1]
 
     tfc = 0 
     if start_val == 0:
@@ -833,18 +841,23 @@ def get_dynamic_features(col_data: pd.Series,
             else:
                 tfc = -((start_val - end_val) / end_val)
 
-    # calculation of time to stability (tsv)
-    tsv = len(col_data)
-    while tsv > 1:
-        if abs(col_data.iloc[tsv-1] - col_data.iloc[tsv-2]) < abs_change_tolerance:
-            tsv -= 1
-        else:
-            tsv_value = col_data.iloc[tsv-1]
-            break
-    if tsv == 1:
-        tsv_value = col_data.iloc[0]
+    # calculation of time to stability (tsv) using numpy operations
+    # Compute absolute differences between consecutive elements
+    abs_diffs = np.abs(np.diff(data_array))
+    # Find indices where change exceeds tolerance (from the end)
+    stable_mask = abs_diffs < abs_change_tolerance
+    # Find the last position where change exceeded tolerance
+    if np.all(stable_mask):
+        # All changes are below tolerance, stability from start
+        tsv = 1
+        tsv_value = data_array[0]
+    else:
+        # Find the last index where change exceeded tolerance
+        last_change_idx = len(data_array) - 1 - np.argmax(stable_mask[::-1] == False)
+        tsv = last_change_idx + 1
+        tsv_value = data_array[tsv - 1] if tsv > 0 else data_array[0]
 
-    max_sim_time = len(col_data)
+    max_sim_time = len(data_array)
     n_auc = auc / max_sim_time
     n_max_time = max_time / max_sim_time
     n_min_time = min_time / max_sim_time
@@ -929,32 +942,30 @@ def systematic_edge_pruning(old_model_spec: ModelSpecification, old_model: Model
     '''
     Prune the model by removing `edge_number` number of regulations from the model_spec randomly 
     '''
-    # fix the random seed for reproducibility
-    np.random.seed(random_seed)
+    # Use numpy random generator for reproducibility
+    rng = np.random.default_rng(random_seed)
     
     regulations = deepcopy(old_model_spec.regulations)
     regulation_types = deepcopy(old_model_spec.regulation_types)
     new_model_spec = deepcopy(old_model_spec)
     
-    regulations_without_D = [r for r in regulations if 'D' not in r[0]]
+    # Build list of valid indices (excluding drug regulations) upfront
+    valid_indices = [i for i, r in enumerate(regulations) if 'D' not in r[0]]
     
-    assert len(regulations_without_D) > edge_number + 1, "Error in systematic edge pruning: The `number of regulations that is not drug regulations` + 1 to prune must be less than the total number of regulations in the original model specification"
+    assert len(valid_indices) > edge_number, "Error in systematic edge pruning: The `number of regulations that is not drug regulations` must be greater than the number to prune"
     assert edge_number > 0, "Error in systematic edge pruning: The number of regulations to prune must be greater than 0"
     
+    # Select indices to delete using random sampling (no rejection sampling needed)
+    indices_to_delete = rng.choice(valid_indices, size=edge_number, replace=False)
+    
+    # Sort in reverse order to delete from end first (to preserve indices)
+    indices_to_delete = sorted(indices_to_delete, reverse=True)
+    
     reg_deleted = []
-
-    i = 0 
-    while i < edge_number:
-        # randomly select an index to remove
-        index = np.random.randint(0, len(regulations))
-        # do not remove drug regulations
-        if 'D' in regulations[index][0]: 
-            # TODO: this is inefficient, a better method would be to filter D species out of selection 
-            continue
+    for index in indices_to_delete:
         reg_deleted.append((regulations[index], regulation_types[index]))   
         del regulations[index]
         del regulation_types[index]
-        i += 1
     
     new_model_spec.regulations = regulations
     new_model_spec.regulation_types = regulation_types

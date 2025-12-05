@@ -186,13 +186,13 @@ def generate_feature_data(model_spec: ModelSpecification, initial_values: dict, 
                 perturbed_values[s] = initial_values[s] * np.random.uniform(min_, max_)
             all_perturbed_values.append(perturbed_values)
         elif perturbation_type == 'gaussian':
-            if 'std' in perturbation_params:
-                sigma = perturbation_params['std']
-            elif 'rsd' in perturbation_params:
-                rsd = perturbation_params['rsd']
-                sigma = rsd * initial_values[all_species[0]]  # Use first species for initial rsd calculation
             for s in all_species:
                 mu = initial_values[s]
+                if 'std' in perturbation_params:
+                    sigma = perturbation_params['std']
+                elif 'rsd' in perturbation_params:
+                    rsd = perturbation_params['rsd']
+                    sigma = rsd * mu  # Calculate sigma per-species based on its mean
                 perturbed_values[s] = np.random.normal(mu, sigma)
             all_perturbed_values.append(perturbed_values)
         

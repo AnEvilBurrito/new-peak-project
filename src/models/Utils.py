@@ -853,7 +853,7 @@ def get_dynamic_features(col_data: pd.Series,
         tsv_value = data_array[0]
     else:
         # Find the last index where change exceeded tolerance
-        last_change_idx = len(data_array) - 1 - np.argmax(stable_mask[::-1] == False)
+        last_change_idx = len(data_array) - 1 - np.argmax(~stable_mask[::-1])
         tsv = last_change_idx + 1
         tsv_value = data_array[tsv - 1] if tsv > 0 else data_array[0]
 
@@ -952,7 +952,7 @@ def systematic_edge_pruning(old_model_spec: ModelSpecification, old_model: Model
     # Build list of valid indices (excluding drug regulations) upfront
     valid_indices = [i for i, r in enumerate(regulations) if 'D' not in r[0]]
     
-    assert len(valid_indices) > edge_number, "Error in systematic edge pruning: The `number of regulations that is not drug regulations` must be greater than the number to prune"
+    assert len(valid_indices) >= edge_number, "Error in systematic edge pruning: The `number of regulations that is not drug regulations` must be greater than or equal to the number to prune"
     assert edge_number > 0, "Error in systematic edge pruning: The number of regulations to prune must be greater than 0"
     
     # Select indices to delete using random sampling (no rejection sampling needed)

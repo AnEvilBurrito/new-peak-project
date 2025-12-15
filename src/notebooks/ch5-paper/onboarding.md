@@ -77,7 +77,7 @@ Machine learning pipe, with one implementation located in `./src/ml/Workflow.py`
 
 ## Tests 
 
-Tests specifically for the project will be located in `SAVE_RESULT_PATH/tests`. An example test would be to test for a successful s3 server connection.. etc. 
+Tests specifically for the project will be located in `./src/notebooks/ch5-paper/tests`. An example test would be to test for a successful s3 server connection.. etc. 
 
 ## Analysis
 

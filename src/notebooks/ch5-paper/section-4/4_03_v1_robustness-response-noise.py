@@ -26,7 +26,7 @@ os.chdir(project_path + "/src")
 print(f"Project path set to: {os.getcwd()}")
 
 # %%
-from dotenv import dotenv_values
+from dotenv import dotenv_values # noqa
 config = dotenv_values(".env")
 SAVE_RESULT_PATH = config["SAVE_RESULT_PATH"]
 

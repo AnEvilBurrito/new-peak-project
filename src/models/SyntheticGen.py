@@ -620,6 +620,78 @@ def generate_model_timecourse_data_diff_build(model_spec: ModelSpecification, so
     output_df = pd.DataFrame(all_outputs)
     return output_df
 
+
+# Unified functions with version parameter support - Phase 1 Implementation
+def unified_generate_feature_data(version_number='v3', **kwargs):
+    """
+    Unified function for generating feature data with version selection
+    
+    Parameters:
+    version_number: str - 'v1', 'v2', 'v3' (default: 'v3')
+    **kwargs: Parameters specific to each version
+    
+    Returns:
+    DataFrame with perturbed values
+    """
+    version_map = {
+        'v1': generate_feature_data,
+        'v2': generate_feature_data_v2, 
+        'v3': generate_feature_data_v3
+    }
+    
+    if version_number not in version_map:
+        raise ValueError(f"Unsupported version: {version_number}. Available versions: {list(version_map.keys())}")
+    
+    return version_map[version_number](**kwargs)
+
+
+def unified_generate_target_data(version_number='default', **kwargs):
+    """
+    Unified function for generating target data with version selection
+    
+    Parameters:
+    version_number: str - 'default', 'diff_spec', 'diff_build' (default: 'default')
+    **kwargs: Parameters specific to each version
+    
+    Returns:
+    DataFrame with target values and optional time course data
+    """
+    version_map = {
+        'default': generate_target_data,
+        'diff_spec': generate_target_data_diff_spec,
+        'diff_build': generate_target_data_diff_build
+    }
+    
+    if version_number not in version_map:
+        raise ValueError(f"Unsupported version: {version_number}. Available versions: {list(version_map.keys())}")
+    
+    return version_map[version_number](**kwargs)
+
+
+def unified_generate_model_timecourse_data(version_number='default', **kwargs):
+    """
+    Unified function for generating time course data with version selection
+    
+    Parameters:
+    version_number: str - 'default', 'diff_spec', 'diff_build', 'v3', 'diff_build_v3' (default: 'default')
+    **kwargs: Parameters specific to each version
+    
+    Returns:
+    DataFrame with time course data
+    """
+    version_map = {
+        "default": generate_model_timecourse_data_v3,
+        "diff_spec": generate_model_timecourse_data_diff_spec,
+        "diff_build": generate_model_timecourse_data_diff_build,
+        "v3": generate_model_timecourse_data_v3,
+        "diff_build_v3": generate_model_timecourse_data_diff_build_v3,
+    }
+    
+    if version_number not in version_map:
+        raise ValueError(f"Unsupported version: {version_number}. Available versions: {list(version_map.keys())}")
+    
+    return version_map[version_number](**kwargs)
+
 def generate_model_timecourse_data(model_spec: ModelSpecification, 
                                    solver: Solver, 
                                    feature_df: pd.DataFrame, 
@@ -819,5 +891,3 @@ def generate_model_timecourse_data_diff_build_v3(all_species: dict,
 
     output_df = pd.DataFrame(all_outputs)
     return output_df
-
-

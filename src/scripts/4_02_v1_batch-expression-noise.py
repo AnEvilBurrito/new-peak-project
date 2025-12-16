@@ -10,6 +10,7 @@ import sys
 import pandas as pd
 import numpy as np
 from datetime import datetime
+import time
 
 # Add src to path for imports
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -155,9 +156,84 @@ def apply_expression_noise(feature_data, noise_level, seed):
     return noisy_feature_data
 
 
+def generate_markdown_report(final_results, execution_times, config, notebook_config, total_duration):
+    """Generate markdown report with execution summary and data preview"""
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    
+    # Get data preview statistics
+    if final_results is not None:
+        data_shape = final_results.shape
+        noise_levels = final_results['Expression Noise Level'].unique()
+        models = final_results['Model'].unique() if 'Model' in final_results.columns else []
+        feature_types = final_results['Feature Data'].unique() if 'Feature Data' in final_results.columns else []
+    else:
+        data_shape = (0, 0)
+        noise_levels = []
+        models = []
+        feature_types = []
+    
+    # Format execution times
+    time_summary = "\n".join([f"- Noise level {level}: {duration:.2f} seconds" 
+                             for level, duration in execution_times.items()])
+    
+    report = f"""# Batch Expression Noise Execution Report
+
+**Experiment**: Section 4 / Experiment 02 / Version 1  
+**Notebook**: batch-expression-noise  
+**Execution Timestamp**: {timestamp}  
+**Total Duration**: {total_duration:.2f} seconds ({total_duration/60:.2f} minutes)
+
+## Execution Summary
+
+**Data Generated**: {data_shape[0]} rows × {data_shape[1]} columns  
+**Noise Levels Processed**: {', '.join(map(str, noise_levels))}  
+**Total Noise Levels**: {len(noise_levels)}
+
+### Execution Time Breakdown
+{time_summary}
+
+## Configuration Summary
+
+- **Number of Samples**: {config['machine_learning']['n_samples']}
+- **Number of Repeats**: {config['machine_learning']['n_reps']}
+- **Noise Levels**: {config['expression_noise_levels']}
+- **Models Used**: {len(models)} models
+
+## Data Preview
+
+### First 5 Rows
+```
+{final_results.head().to_string() if final_results is not None else 'No data generated'}
+```
+
+### Summary Statistics by Noise Level
+```
+{final_results.groupby('Expression Noise Level').describe().to_string() if final_results is not None else 'No data generated'}
+```
+
+## Storage Information
+
+- **S3 Base Path**: {notebook_config.get('s3_base_path', 'Not specified')}
+- **Report Location**: {notebook_config.get('version', 'v1')}_expression_noise_report.md
+- **Data Files**: Uploaded to S3 data folder
+
+## Success Summary
+
+✅ Batch execution completed successfully  
+✅ {len(noise_levels)} noise levels processed  
+✅ {data_shape[0]} total data rows generated  
+✅ Report and data uploaded to S3 storage
+
+*Generated automatically by batch execution system*
+"""
+    
+    return report
+
+
 def run_batch_expression_noise():
     """Main batch execution function for expression noise"""
     print("🚀 Starting Batch Expression Noise Execution")
+    start_time = time.time()
     
     # Initialize batch framework
     batch_executor = create_batch_executor(
@@ -172,6 +248,9 @@ def run_batch_expression_noise():
     
     # Load configuration using S3 manager
     config = load_experiment_config(s3_manager)
+    
+    # Track execution times per noise level
+    execution_times = {}
     
     try:
         # Check which noise levels are still pending
@@ -223,6 +302,7 @@ def run_batch_expression_noise():
         
         for noise_level in pending_levels:
             print(f"Processing expression noise level: {noise_level}")
+            level_start_time = time.time()
             
             # Generate assembly ID for this specific config value
             assembly_id = batch_executor.generate_assembly_id(noise_level)
@@ -315,8 +395,14 @@ def run_batch_expression_noise():
             batch_executor.save_batch_data(metric_df, 'expression_noise_results')
             batch_executor.mark_assembly_completed()
             
+            # Record execution time for this noise level
+            level_duration = time.time() - level_start_time
+            execution_times[noise_level] = level_duration
             all_results.append(metric_df)
-            print(f"✅ Completed processing for noise level {noise_level}")
+            print(f"✅ Completed processing for noise level {noise_level} ({level_duration:.2f}s)")
+        
+        # Calculate total execution time
+        total_duration = time.time() - start_time
         
         # Combine all results if needed for return
         if all_results:
@@ -324,6 +410,34 @@ def run_batch_expression_noise():
             print(f"✅ Batch execution completed successfully")
             print(f"Processed {len(pending_levels)} noise levels")
             print(f"Final results shape: {final_results.shape}")
+            print(f"Total execution time: {total_duration:.2f} seconds ({total_duration/60:.2f} minutes)")
+            
+            # Generate and upload markdown report
+            try:
+                # Create notebook config for S3 upload
+                notebook_config = {
+                    'notebook_name': 'batch-expression-noise',
+                    'exp_number': '02',
+                    'version_number': 'v1',
+                    'section_number': '4',
+                    's3_base_path': s3_manager._get_s3_key({
+                        'notebook_name': 'batch-expression-noise',
+                        'exp_number': '02',
+                        'version_number': 'v1'
+                    })
+                }
+                
+                # Generate report content
+                report_content = generate_markdown_report(final_results, execution_times, config, notebook_config, total_duration)
+                
+                # Upload report to S3 report folder
+                report_key = s3_manager._get_s3_key(notebook_config, subfolder='report', filename='4_02_v1_expression_noise_report.md')
+                s3_manager._upload_with_progress(report_content, report_key, content_type='text/markdown')
+                print(f"✅ Report uploaded to S3: {report_key}")
+                
+            except Exception as report_error:
+                print(f"⚠️ Failed to generate/upload report: {report_error}")
+            
             return final_results
         else:
             print("❌ No results were generated")

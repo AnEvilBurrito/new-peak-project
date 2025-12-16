@@ -10,6 +10,7 @@ import sys
 import pandas as pd
 import numpy as np
 from datetime import datetime
+import time
 
 # Add src to path for imports
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -154,9 +155,84 @@ def apply_parameter_distortion(parameter_sets, distortion_factor, seed):
     return modified_parameter_sets
 
 
+def generate_markdown_report(final_results, execution_times, config, notebook_config, total_duration):
+    """Generate markdown report with execution summary and data preview"""
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    
+    # Get data preview statistics
+    if final_results is not None:
+        data_shape = final_results.shape
+        distortion_factors = final_results['Distortion Factor'].unique()
+        models = final_results['Model'].unique() if 'Model' in final_results.columns else []
+        feature_types = final_results['Feature Data'].unique() if 'Feature Data' in final_results.columns else []
+    else:
+        data_shape = (0, 0)
+        distortion_factors = []
+        models = []
+        feature_types = []
+    
+    # Format execution times
+    time_summary = "\n".join([f"- Distortion factor {factor}: {duration:.2f} seconds" 
+                             for factor, duration in execution_times.items()])
+    
+    report = f"""# Batch Parameter Distortion Execution Report
+
+**Experiment**: Section 4 / Experiment 01 / Version 1  
+**Notebook**: batch-parameter-distortion  
+**Execution Timestamp**: {timestamp}  
+**Total Duration**: {total_duration:.2f} seconds ({total_duration/60:.2f} minutes)
+
+## Execution Summary
+
+**Data Generated**: {data_shape[0]} rows × {data_shape[1]} columns  
+**Distortion Factors Processed**: {', '.join(map(str, distortion_factors))}  
+**Total Distortion Factors**: {len(distortion_factors)}
+
+### Execution Time Breakdown
+{time_summary}
+
+## Configuration Summary
+
+- **Number of Samples**: {config['machine_learning']['n_samples']}
+- **Number of Repeats**: {config['machine_learning']['n_reps']}
+- **Distortion Range**: {config['distortion_range']}
+- **Models Used**: {len(models)} models
+
+## Data Preview
+
+### First 5 Rows
+```
+{final_results.head().to_string() if final_results is not None else 'No data generated'}
+```
+
+### Summary Statistics by Distortion Factor
+```
+{final_results.groupby('Distortion Factor').describe().to_string() if final_results is not None else 'No data generated'}
+```
+
+## Storage Information
+
+- **S3 Base Path**: {notebook_config.get('s3_base_path', 'Not specified')}
+- **Report Location**: {notebook_config.get('version', 'v1')}_parameter_distortion_report.md
+- **Data Files**: Uploaded to S3 data folder
+
+## Success Summary
+
+✅ Batch execution completed successfully  
+✅ {len(distortion_factors)} distortion factors processed  
+✅ {data_shape[0]} total data rows generated  
+✅ Report and data uploaded to S3 storage
+
+*Generated automatically by batch execution system*
+"""
+    
+    return report
+
+
 def run_batch_parameter_distortion():
     """Main batch execution function for parameter distortion"""
     print("🚀 Starting Batch Parameter Distortion Execution")
+    start_time = time.time()
     
     # Initialize batch framework
     batch_executor = create_batch_executor(
@@ -171,6 +247,9 @@ def run_batch_parameter_distortion():
     
     # Load configuration using S3 manager
     config = load_experiment_config(s3_manager)
+    
+    # Track execution times per distortion factor
+    execution_times = {}
     
     try:
         # Check which distortion factors are still pending
@@ -222,6 +301,7 @@ def run_batch_parameter_distortion():
         
         for dis_factor in pending_factors:
             print(f"Processing distortion factor: {dis_factor}")
+            factor_start_time = time.time()
             
             # Generate assembly ID for this specific config value
             assembly_id = batch_executor.generate_assembly_id(dis_factor)
@@ -317,8 +397,14 @@ def run_batch_parameter_distortion():
             batch_executor.save_batch_data(metric_df, 'parameter_distortion_results')
             batch_executor.mark_assembly_completed()
             
+            # Record execution time for this distortion factor
+            factor_duration = time.time() - factor_start_time
+            execution_times[dis_factor] = factor_duration
             all_results.append(metric_df)
-            print(f"✅ Completed processing for distortion factor {dis_factor}")
+            print(f"✅ Completed processing for distortion factor {dis_factor} ({factor_duration:.2f}s)")
+        
+        # Calculate total execution time
+        total_duration = time.time() - start_time
         
         # Combine all results if needed for return
         if all_results:
@@ -326,6 +412,34 @@ def run_batch_parameter_distortion():
             print(f"✅ Batch execution completed successfully")
             print(f"Processed {len(pending_factors)} distortion factors")
             print(f"Final results shape: {final_results.shape}")
+            print(f"Total execution time: {total_duration:.2f} seconds ({total_duration/60:.2f} minutes)")
+            
+            # Generate and upload markdown report
+            try:
+                # Create notebook config for S3 upload
+                notebook_config = {
+                    'notebook_name': 'batch-parameter-distortion',
+                    'exp_number': '01',
+                    'version_number': 'v1',
+                    'section_number': '4',
+                    's3_base_path': s3_manager._get_s3_key({
+                        'notebook_name': 'batch-parameter-distortion',
+                        'exp_number': '01',
+                        'version_number': 'v1'
+                    })
+                }
+                
+                # Generate report content
+                report_content = generate_markdown_report(final_results, execution_times, config, notebook_config, total_duration)
+                
+                # Upload report to S3 report folder
+                report_key = s3_manager._get_s3_key(notebook_config, subfolder='report', filename='4_01_v1_parameter_distortion_report.md')
+                s3_manager._upload_with_progress(report_content, report_key, content_type='text/markdown')
+                print(f"✅ Report uploaded to S3: {report_key}")
+                
+            except Exception as report_error:
+                print(f"⚠️ Failed to generate/upload report: {report_error}")
+            
             return final_results
         else:
             print("❌ No results were generated")

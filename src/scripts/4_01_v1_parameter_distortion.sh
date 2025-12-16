@@ -3,27 +3,35 @@
 # Batch Parameter Distortion Execution Script
 # Section 4 / Experiment 01 / Version 1
 
+# Set script variables with absolute paths
+VENV_PATH="/home/dawsonlan/new-peak-project/.venv/bin/activate"
+PYTHON_SCRIPT="/home/dawsonlan/new-peak-project/src/scripts/4_01_v1_batch-parameter-distortion.py"
+PROJECT_DIR="/home/dawsonlan/new-peak-project"
+
 echo "🚀 Starting Batch Parameter Distortion Execution via Shell Script"
 
 # Set script start time for shell-level timing
 SCRIPT_START_TIME=$(date +%s)
 
-# Activate uv environment
-echo "🔧 Activating uv environment..."
-source ../.venv/bin/activate
+# Change to project directory
+echo "🔧 Changing to project directory..."
+cd "$PROJECT_DIR" || { echo "❌ Failed to change to project directory"; exit 1; }
 
-# Check if activation was successful
-if [ $? -ne 0 ]; then
-    echo "❌ Failed to activate uv environment"
-    echo "💡 Trying alternative activation path..."
-    source .venv/bin/activate
-    if [ $? -ne 0 ]; then
-        echo "❌ Failed to activate environment. Please check your uv setup."
-        exit 1
-    fi
+# Check if virtual environment exists
+if [ ! -f "$VENV_PATH" ]; then
+    echo "❌ Virtual environment not found at $VENV_PATH"
+    exit 1
 fi
 
-echo "✅ Environment activated successfully"
+# Check if Python script exists
+if [ ! -f "$PYTHON_SCRIPT" ]; then
+    echo "❌ Python script not found at $PYTHON_SCRIPT"
+    exit 1
+fi
+
+# Source the virtual environment
+echo "🔧 Activating virtual environment..."
+source "$VENV_PATH"
 
 # Set environment variables based on .env configuration
 echo "🔧 Setting environment variables..."
@@ -31,7 +39,7 @@ export PYTHONPATH=$(pwd)/src:$PYTHONPATH
 
 # Execute the Python batch script
 echo "🚀 Executing Python batch script..."
-python 4_01_v1_batch-parameter-distortion.py
+python "$PYTHON_SCRIPT"
 
 # Capture Python script exit code
 PYTHON_EXIT_CODE=$?

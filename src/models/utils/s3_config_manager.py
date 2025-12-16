@@ -298,12 +298,22 @@ class S3ConfigManager:
             else:
                 raise ValueError("Data does not have a 'to_csv' method")
                 
+        elif data_format == 'parquet':
+            if hasattr(data, 'to_parquet'):
+                body = io.BytesIO()
+                # Ensure index is not saved for parquet as well
+                kwargs.setdefault('index', False)
+                data.to_parquet(body, **kwargs)
+                content_type = 'application/octet-stream'
+            else:
+                raise ValueError("Data does not have a 'to_parquet' method")
+                
         elif data_format == 'txt':
             body = str(data)
             content_type = 'text/plain'
             
         else:
-            raise ValueError("Unsupported data format. Use 'pkl', 'csv', or 'txt'")
+            raise ValueError("Unsupported data format. Use 'pkl', 'csv', 'parquet', or 'txt'")
         
         # Upload to S3
         self._upload_with_progress(body, key, content_type=content_type)
@@ -311,34 +321,37 @@ class S3ConfigManager:
     def load_data(self, notebook_config, data_name, data_format='pkl', **kwargs):
         """
         Load data from S3 in specified format.
-        
+
         Args:
             notebook_config: Dictionary with notebook configuration
             data_name: Name of the data file
-            data_format: Format ('pkl', 'csv')
+            data_format: Format ('pkl', 'csv', 'parquet')
             **kwargs: Additional arguments for deserialization
-            
+
         Returns:
             Loaded data object
         """
         version_number = notebook_config.get('version_number', 'v1')
         filename = f"{version_number}_{data_name}.{data_format}"
         key = self._get_s3_key(notebook_config, subfolder='data', filename=filename)
-        
+
         # Download from S3
         data_content = self._download_with_progress(key)
-        
+
         # Deserialize based on format
         if data_format == 'pkl':
             return pickle.loads(data_content, **kwargs)
-            
+
         elif data_format == 'csv':
             # Ensure consistent dtype inference for integers
             kwargs.setdefault('dtype', None)  # Let pandas infer properly
             return pd.read_csv(io.BytesIO(data_content), **kwargs)
-            
+
+        elif data_format == 'parquet':
+            return pd.read_parquet(io.BytesIO(data_content), **kwargs)
+
         else:
-            raise ValueError("Unsupported data format. Use 'pkl' or 'csv'")
+            raise ValueError("Unsupported data format. Use 'pkl', 'csv', or 'parquet'")
     
     def save_figure(self, notebook_config, fig, fig_name, fig_format='png', **kwargs):
         """

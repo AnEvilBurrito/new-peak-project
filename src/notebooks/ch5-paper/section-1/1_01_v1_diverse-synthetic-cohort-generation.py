@@ -55,8 +55,6 @@ notebook_config = {
     'section_number': section_number
 }
 
-# Calculate notebook path for S3 storage
-notebook_path = f'{exp_number}_{version_number}_{notebook_name}'
 
 # Define experiment configuration with full processing pipeline
 exp_config = {

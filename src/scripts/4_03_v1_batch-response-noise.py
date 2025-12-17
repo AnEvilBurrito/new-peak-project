@@ -418,7 +418,8 @@ def run_batch_response_noise():
                     's3_base_path': s3_manager._get_s3_key({
                         'notebook_name': 'batch-response-noise',
                         'exp_number': '03',
-                        'version_number': 'v1'
+                        'version_number': 'v1',
+                        'section_number': '4'
                     })
                 }
                 

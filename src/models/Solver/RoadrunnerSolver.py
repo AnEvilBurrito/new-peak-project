@@ -5,6 +5,17 @@ import pandas as pd
 from roadrunner import RoadRunner
 
 class RoadrunnerSolver(Solver):
+    """
+    RoadRunner-based ODE solver for biochemical models.
+    
+    This solver uses the libRoadRunner library to compile and simulate
+    biochemical models defined in Antimony or SBML formats. It provides
+    an interface for setting initial states and parameters, and returns
+    simulation results as pandas DataFrames.
+    
+    Inherits from:
+        Solver: Abstract base class for ODE solvers
+    """
     
     def __init__(self):
         super().__init__()
@@ -12,7 +23,16 @@ class RoadrunnerSolver(Solver):
         self.last_sim_result = None
         
     def compile(self, compile_str: str, **kwargs) -> RoadRunner:
+        """
+        Compile a model string using libRoadRunner.
         
+        Args:
+            compile_str: Model definition in Antimony or SBML format
+            **kwargs: Additional options passed to RoadRunner constructor
+        
+        Returns:
+            RoadRunner: The compiled RoadRunner instance
+        """
         self.roadrunner_instance = RoadRunner(compile_str, **kwargs)
     
     def simulate(self, start: float, stop: float, step: float) -> pd.DataFrame:
@@ -95,5 +115,3 @@ class RoadrunnerSolver(Solver):
                 return False
         
         return True
-    
-    

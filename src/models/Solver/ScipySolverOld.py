@@ -172,6 +172,21 @@ class ScipySolver(Solver):
         return func
     
     def _parse_antimony_model(self, antimony_str):
+        """
+        Parse an Antimony model string to extract reactions, species, parameters,
+        initial conditions, and parameter values.
+        
+        Args:
+            antimony_str: String containing Antimony model definition
+            
+        Returns:
+            tuple: (reactions, species, parameters, y0, parameter_values)
+                - reactions: List of reaction strings
+                - species: List of species names
+                - parameters: List of parameter names
+                - y0: List of initial concentrations for species
+                - parameter_values: List of parameter values
+        """
         reactions = []
         species_set = set()
         species_dict = {}
@@ -219,6 +234,17 @@ class ScipySolver(Solver):
         return reactions, species, parameters, y0, parameter_values
     
     def _reactions_to_jit_ode_func(self, reactions, species, parameters):
+        """
+        Convert a list of reactions to a Numba-compiled ODE function.
+        
+        Args:
+            reactions: List of reaction strings in format "A + B -> C + D; rate_expr"
+            species: List of species names
+            parameters: List of parameter names
+            
+        Returns:
+            function: Numba-compiled ODE function that takes (y, t, params) arguments
+        """
         # Create symbolic variables
         species_syms = {s: sp.Symbol(s) for s in species}
         param_syms = {p: sp.Symbol(p) for p in parameters}

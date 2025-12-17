@@ -425,7 +425,8 @@ def run_batch_parameter_distortion():
                     's3_base_path': s3_manager._get_s3_key({
                         'notebook_name': 'batch-parameter-distortion',
                         'exp_number': '01',
-                        'version_number': 'v1'
+                        'version_number': 'v1',
+                        'section_number': '4'
                     })
                 }
                 

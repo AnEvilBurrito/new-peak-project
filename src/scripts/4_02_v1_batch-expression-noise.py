@@ -423,7 +423,8 @@ def run_batch_expression_noise():
                     's3_base_path': s3_manager._get_s3_key({
                         'notebook_name': 'batch-expression-noise',
                         'exp_number': '02',
-                        'version_number': 'v1'
+                        'version_number': 'v1',
+                        'section_number': '4'
                     })
                 }
                 

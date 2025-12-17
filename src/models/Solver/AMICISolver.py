@@ -7,6 +7,17 @@ import pandas as pd
 import numpy as np
 
 class AMICISolver(Solver):
+    """
+    AMICI-based ODE solver for biochemical models.
+    
+    This solver uses the AMICI library to compile SBML models and simulate
+    ordinary differential equations. It provides an interface for setting
+    initial states and parameters, and returns simulation results as pandas
+    DataFrames.
+    
+    Inherits from:
+        Solver: Abstract base class for ODE solvers
+    """
     
     def __init__(self):
         super().__init__()
@@ -20,7 +31,17 @@ class AMICISolver(Solver):
         
     def compile(self, compile_str: str, **kwargs) -> None:
         """
-        AMICI Solver will only take in a filepath to a sbml file,
+        Compile an SBML model using the AMICI library.
+        
+        Args:
+            compile_str: Path to SBML file or SBML string
+            **kwargs: Additional compilation options:
+                model_dir: Directory for compiled model output (required)
+                model_name: Name for the compiled model (required)
+                verbosity: Logging verbosity level (default: logging.INFO)
+        
+        Raises:
+            ValueError: If model_dir or model_name are not provided
         """
         # Parse the antimony string to extract reactions, species, parameters, y0, and parameter_values
         model_dir = kwargs.get('model_dir', None)
@@ -40,7 +61,22 @@ class AMICISolver(Solver):
         self.model = model
         
     def simulate(self, start: float, stop: float, step: float) -> pd.DataFrame:
-
+        """
+        Simulate the compiled model over a specified time range.
+        
+        Args:
+            start: Start time for simulation
+            stop: End time for simulation
+            step: Number of time points (linearly spaced between start and stop)
+        
+        Returns:
+            pd.DataFrame: Simulation results with columns:
+                - 'time': Time points
+                - [state_names]: State variable values at each time point
+        
+        Raises:
+            ValueError: If model is not compiled
+        """
         if self.model_module is None:
             raise ValueError("Model instance is not created. Please call compile() first.")
         

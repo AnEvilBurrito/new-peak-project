@@ -148,11 +148,12 @@ class S3ConfigManager:
         Returns:
             S3 key path string
         """
+        section_number = notebook_config.get('section_number', '00')
         exp_number = notebook_config.get('exp_number')
         version_number = notebook_config.get('version_number', 'v1')
         notebook_name = notebook_config.get('notebook_name')
         
-        base_path = f"{self.save_result_path}/{exp_number}_{version_number}_{notebook_name}"
+        base_path = f"{self.save_result_path}/{section_number}_{exp_number}_{version_number}_{notebook_name}"
         
         if subfolder:
             base_path = f"{base_path}/{subfolder}"

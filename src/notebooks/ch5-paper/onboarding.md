@@ -21,7 +21,7 @@ CONFIG_PATH='data-and-mechanism-project'
 Main folder: `ch5-paper`
 Subfolders will be labelled as `section-1`, `section-2` etc.  
 Notebook located in sub-folders will be named as: `{section-number}_{exp-number}_{version-number}_{experiment-title}`
-Subsequent Results from notebook will be saved at key: `{SAVE_RESULT_PATH}/{exp-number}_{version-number}_{experiment-title}/{result-name}.{extension}`
+Subsequent Results from notebook will be saved at key: `{SAVE_RESULT_PATH}/{section-number}_{exp-number}_{version-number}_{experiment-title}/{result-name}.{extension}`
 
 Inside a notebook, the following parameters will have to be defined: 
 ```python
@@ -87,4 +87,4 @@ Reports: are generated so that future analyses can directly read from a markdown
 - Data table structures: of the loaded results or data 
 - Analysis results: ideally with significance and p-values attached for statistical tests
 
-Keep in mind that some files with `.py` format are actually notebooks, their `ipynb` format is auto-generated using `JupyText`. Do not run the those files in `.py` format, they are meant to be executed manually via the `ipynb` format. But you can read the code in `.py` format if needed. `.py` files that are not notebooks can be safely executed. A key difference is that notebook files in `.py` format will have `# %%` or `# %% [markdown]` tags to separate code cells and markdown cells respectively.
+Keep in mind to only edit the notebook in its `.py` format as the `ipynb` format is auto-generated using `JupyText`. Do not run the notebooks in `.py` format, they are meant to be executed manually via the `ipynb` format. 

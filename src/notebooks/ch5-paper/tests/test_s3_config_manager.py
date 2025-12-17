@@ -44,6 +44,7 @@ test_config = {
     'notebook_name': 'test-experiment',
     'exp_number': '99',
     'version_number': 'v1',
+    'section_number': '00',
     'description': 'Test experiment for S3ConfigManager validation'
 }
 
@@ -219,7 +220,7 @@ print("="*50)
 print("\nTest files created in S3:")
 print(f"Bucket: {manager.bucket_name}")
 print(f"Base path: {manager.save_result_path}")
-print(f"Experiment: {test_config['exp_number']}_{test_config['version_number']}_{test_config['notebook_name']}")
+print(f"Experiment: {test_config['section_number']}_{test_config['exp_number']}_{test_config['version_number']}_{test_config['notebook_name']}")
 
 print("\nTo verify manually, check your S3 bucket for the test files.")
 print("To clean up test files, uncomment the delete_experiment_files call in the test.")

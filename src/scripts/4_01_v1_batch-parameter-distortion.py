@@ -31,6 +31,7 @@ from models.utils.dynamic_calculations import dynamic_features_method, last_time
 from ml.Workflow import batch_eval_standard
 from numpy.random import SeedSequence, default_rng
 from joblib import Parallel, delayed
+from scripts.ntfy_notifier import notify_start, notify_success, notify_failure
 
 
 def load_experiment_config(s3_manager):
@@ -234,6 +235,10 @@ def run_batch_parameter_distortion():
     print("🚀 Starting Batch Parameter Distortion Execution")
     start_time = time.time()
     
+    # Send start notification
+    script_name = 'batch-parameter-distortion'
+    notify_start(script_name)
+    
     # Initialize batch framework
     batch_executor = create_batch_executor(
         notebook_name='batch-parameter-distortion',
@@ -414,6 +419,9 @@ def run_batch_parameter_distortion():
             print(f"Final results shape: {final_results.shape}")
             print(f"Total execution time: {total_duration:.2f} seconds ({total_duration/60:.2f} minutes)")
             
+            # Send success notification
+            notify_success(script_name, total_duration, processed_count=len(pending_factors))
+            
             # Generate and upload markdown report
             try:
                 # Create notebook config for S3 upload
@@ -444,10 +452,14 @@ def run_batch_parameter_distortion():
             return final_results
         else:
             print("❌ No results were generated")
+            # Still send success notification? No results but execution completed.
+            notify_success(script_name, total_duration, processed_count=0)
             return None
         
     except Exception as e:
         print(f"❌ Batch execution failed: {e}")
+        # Send failure notification
+        notify_failure(script_name, e, duration_seconds=time.time() - start_time)
         raise
 
 

@@ -354,6 +354,44 @@ class S3ConfigManager:
         else:
             raise ValueError("Unsupported data format. Use 'pkl', 'csv', or 'parquet'")
     
+    def load_data_from_path(self, s3_key, data_format='pkl', **kwargs):
+        """
+        Load data from S3 using a direct key path.
+
+        Args:
+            s3_key: Full S3 key path (e.g., 'new-peak-project/experiments/ch5-paper/00_99_v1_test-experiment/data/v1_test_data.pkl')
+            data_format: Format ('pkl', 'csv', 'parquet', 'txt')
+            **kwargs: Additional arguments for deserialization
+
+        Returns:
+            Loaded data object (pickle object, pandas DataFrame, or string for txt)
+
+        Raises:
+            FileNotFoundError: If the S3 key does not exist
+            ValueError: If data_format is unsupported
+        """
+        # Download from S3
+        data_content = self._download_with_progress(s3_key)
+
+        # Deserialize based on format
+        if data_format == 'pkl':
+            return pickle.loads(data_content, **kwargs)
+
+        elif data_format == 'csv':
+            # Ensure consistent dtype inference for integers
+            kwargs.setdefault('dtype', None)  # Let pandas infer properly
+            return pd.read_csv(io.BytesIO(data_content), **kwargs)
+
+        elif data_format == 'parquet':
+            return pd.read_parquet(io.BytesIO(data_content), **kwargs)
+
+        elif data_format == 'txt':
+            # Return decoded string
+            return data_content.decode('utf-8')
+
+        else:
+            raise ValueError("Unsupported data format. Use 'pkl', 'csv', 'parquet', or 'txt'")
+    
     def save_figure(self, notebook_config, fig, fig_name, fig_format='png', **kwargs):
         """
         Save matplotlib figure to S3.

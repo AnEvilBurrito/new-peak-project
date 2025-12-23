@@ -217,50 +217,29 @@ class Reaction:
         product_str = ' + '.join(self.products_names)
         rate_law_str = self.archtype.rate_law 
         # rate law substitution needs to occur for reactants, products, extra states and parameters
-        i = 0 
-        while i < len(self.reactants_names):
-            archtype_name = self.archtype.reactants[i]
+        for i, archtype_name in enumerate(self.archtype.reactants):
             replacement_name = self.reactants_names[i]
             # Use regular expression to replace whole words only
             pattern = r'(?<!\w)' + re.escape(archtype_name) + r'(?!\w)'
             rate_law_str = re.sub(pattern, replacement_name, rate_law_str)
-            i += 1 
             
-        i = 0
-        while i < len(self.products_names):
-            archtype_name = self.archtype.products[i]
+        for i, archtype_name in enumerate(self.archtype.products):
             replacement_name = self.products_names[i]
             # Use regular expression to replace whole words only
             pattern = r'(?<!\w)' + re.escape(archtype_name) + r'(?!\w)'
             rate_law_str = re.sub(pattern, replacement_name, rate_law_str)
-            i += 1
 
-        i = 0
-        while i < len(self.archtype.extra_states):
-            archtype_name = self.archtype.extra_states[i]
+        for i, archtype_name in enumerate(self.archtype.extra_states):
             replacement_name = self.extra_states[i]
             # Use regular expression to replace whole words only
             pattern = r'(?<!\w)' + re.escape(archtype_name) + r'(?!\w)'
             rate_law_str = re.sub(pattern, replacement_name, rate_law_str)
-            i += 1
-
-
-        i = 0
-        while i < len(self.archtype.extra_states):
-            archtype_name = self.archtype.extra_states[i]
-            replacement_name = self.extra_states[i]
-            # Use regular expression to replace whole words only
-            pattern = r'(?<!\w)' + re.escape(archtype_name) + r'(?!\w)'
-            rate_law_str = re.sub(pattern, replacement_name, rate_law_str)
-            i += 1
 
         r_index_p = r_index 
         if self.parameter_r_index != '':
             r_index_p = self.parameter_r_index
 
-        i = 0
-        while i < len(self.archtype.parameters):
-            archtype_name = self.archtype.parameters[i]
+        for i, archtype_name in enumerate(self.archtype.parameters):
             if self.exists_linked_parameters():
                 replacement_name = str(self.linked_parameters[i])
             else: 
@@ -268,7 +247,6 @@ class Reaction:
             # Use regular expression to replace whole words only
             pattern = r'(?<!\w)' + re.escape(archtype_name) + r'(?!\w)'
             rate_law_str = re.sub(pattern, replacement_name, rate_law_str)
-            i += 1
 
         return f'{r_index}: {reactant_str} -> {product_str}; {rate_law_str}'
 
@@ -285,41 +263,29 @@ class Reaction:
         product_str = ' + '.join(self.products_names)
         rate_law_str = self.archtype.reverse_rate_law 
         # rate law substitution needs to occur for reactants, products, extra states and parameters
-        i = 0 
-        while i < len(self.reactants_names):
-            archtype_name = self.archtype.reactants[i]
+        for i, archtype_name in enumerate(self.archtype.reactants):
             replacement_name = self.reactants_names[i]
             # Use regular expression to replace whole words only
             pattern = r'(?<!\w)' + re.escape(archtype_name) + r'(?!\w)'
             rate_law_str = re.sub(pattern, replacement_name, rate_law_str)
-            i += 1 
             
-        i = 0
-        while i < len(self.products_names):
-            archtype_name = self.archtype.products[i]
+        for i, archtype_name in enumerate(self.archtype.products):
             replacement_name = self.products_names[i]
             # Use regular expression to replace whole words only
             pattern = r'(?<!\w)' + re.escape(archtype_name) + r'(?!\w)'
             rate_law_str = re.sub(pattern, replacement_name, rate_law_str)
-            i += 1
 
-
-        i = 0
-        while i < len(self.archtype.extra_states):
-            archtype_name = self.archtype.extra_states[i]
+        for i, archtype_name in enumerate(self.archtype.extra_states):
             replacement_name = self.extra_states[i]
             # Use regular expression to replace whole words only
             pattern = r'(?<!\w)' + re.escape(archtype_name) + r'(?!\w)'
             rate_law_str = re.sub(pattern, replacement_name, rate_law_str)
-            i += 1
 
         r_index_p = r_index 
         if self.parameter_r_index != '':
             r_index_p = self.parameter_r_index
 
-        i = 0
-        while i < len(self.archtype.parameters):
-            archtype_name = self.archtype.parameters[i]
+        for i, archtype_name in enumerate(self.archtype.parameters):
             if self.exists_linked_parameters():
                 replacement_name = str(self.linked_parameters[i])
             else:
@@ -327,7 +293,6 @@ class Reaction:
             # Use regular expression to replace whole words only
             pattern = r'(?<!\w)' + re.escape(archtype_name) + r'(?!\w)'
             rate_law_str = re.sub(pattern, replacement_name, rate_law_str)
-            i += 1
 
         return f'{r_index}r: {product_str} -> {reactant_str}; {rate_law_str}'
 

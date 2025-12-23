@@ -47,7 +47,7 @@ s3_manager = S3ConfigManager()
 notebook_name = "diverse-synthetic-cohort-generation"
 exp_number = "99"  # 1st experiment in section
 section_number = "9"  # located in section-1
-version_number = "v9"
+version_number = "v2"
 
 notebook_config = {
     "exp_number": exp_number,
@@ -57,15 +57,23 @@ notebook_config = {
 }
 
 
-# Define experiment configuration with full processing pipeline
 exp_config = {
     "spec": {
-        "n_layers": 5,
-        "n_cascades": 3,
-        "n_regs": 5,
+        "n_layers": 2,
+        "n_cascades": 10,
+        "n_regs": 0,
         "gen_seed": 42,
         "basal_activation": True,
-        "custom_regulations": [],
+        "custom_regulations": [
+            ["R1", "R2", "up"],
+            ["R3", "I1_2", "up"],
+            ["I1_1", "I2_2", "up"],
+            ["I1_2", "I2_1", "down"],
+            ["I1_2", "I2_3", "down"],
+            ["I1_3", "I2_2", "up"],
+            ["I2_1", "R1", "down"],
+            ["I2_3", "R3", "up"],
+        ],
         "drug": {
             "name": "D",
             "start": 500,
@@ -75,8 +83,8 @@ exp_config = {
         },
     },
     "parameter_generation": {
-        "ic_range": [10, 50],
-        "param_range": [0.8, 1.2],
+        "ic_range": [200, 1000],
+        "param_range": [0.1, 10],
         "param_mul_range": [0.99, 1.01],
     },
     "parameter_sampling": {

@@ -66,9 +66,13 @@ class ModelBuilder:
     def get_parameters(self) -> dict:
         '''
         Extracts parameters and their values from all reactions 
-        in the class and returns a dict while subjecting to a naming rule 
+        in the class and returns a dict while subjecting to a naming rule.
         
+        If model is pre-compiled, returns the cached parameters.
         '''
+        if self.pre_compiled:
+            return self.parameters.copy()
+        
         parameters = {}
         i = 0
         while i < len(self.reactions):
@@ -96,7 +100,11 @@ class ModelBuilder:
 
         non-unique state variables will only be repeated once, their 
         default value will only follow the first repeated state variable
+        
+        If model is pre-compiled, returns the cached states.
         '''
+        if self.pre_compiled:
+            return self.states.copy()
 
         states = {}
         for r in self.reactions:
@@ -204,6 +212,12 @@ class ModelBuilder:
         new_model.variables = self.variables
         new_model.enforce_state_values = self.enforce_state_values
         new_model.custom_strings = self.custom_strings
+        
+        # If the original model is pre-compiled, copy the pre-compiled state
+        if self.pre_compiled:
+            new_model.parameters = self.parameters.copy()
+            new_model.states = self.states.copy()
+            new_model.pre_compiled = True
 
         return new_model
 
@@ -381,7 +395,3 @@ class ModelBuilder:
         Plots the results of the simulation
         '''
         self.r_model.plot()
-
-        
-
-        

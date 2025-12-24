@@ -32,3 +32,8 @@ dependencies = [
     "tqdm>=4.67.1",
     "tslearn>=0.6.4",
 ]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.2",
+]

@@ -136,6 +136,42 @@ class ModelBuilder:
         Doc
         '''
         return list(self.variables.keys())
+
+    def get_regulator_parameter_map(self) -> dict:
+        '''
+        Returns mapping from regulator (extra_state) names to parameter names (with r_index).
+        The mapping is aggregated across all reactions in the model.
+        '''
+        if not self.pre_compiled:
+            self.precompile()
+        
+        regulator_map = {}
+        for i, r in enumerate(self.reactions):
+            r_index = f'J{i}'
+            for regulator in r.extra_states:
+                param_bases = r.get_parameters_for_regulator(regulator)
+                for param_base in param_bases:
+                    param_name = f"{param_base}_{r_index}"
+                    regulator_map.setdefault(regulator, []).append(param_name)
+        return regulator_map
+
+    def get_parameter_regulator_map(self) -> dict:
+        '''
+        Returns mapping from parameter names (with r_index) to regulator (extra_state) names.
+        The mapping is aggregated across all reactions in the model.
+        '''
+        if not self.pre_compiled:
+            self.precompile()
+        
+        param_map = {}
+        for i, r in enumerate(self.reactions):
+            r_index = f'J{i}'
+            for param_base in r.archtype.parameters:
+                regulator = r.get_regulator_for_parameter(param_base)
+                if regulator:
+                    param_name = f"{param_base}_{r_index}"
+                    param_map[param_name] = regulator
+        return param_map
     
 
     def add_reaction(self, reaction: Reaction):

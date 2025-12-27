@@ -1,0 +1,1 @@
+you should not execute long commands, as it will most likely fail, instead write them into the @/src\tests folder, and then execute it instead

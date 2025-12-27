@@ -74,6 +74,7 @@ class KineticParameterTuner:
         
         # Parse drug concentrations from model.variables
         self.drug_concentrations = self._parse_drug_concentrations()
+        self._target_concentrations = {}
         
         # Get parameter-reaction map for regulator identification
         self.param_map = get_parameter_reaction_map(model)
@@ -138,7 +139,12 @@ class KineticParameterTuner:
             RuntimeError: If parameter structure doesn't match expected pattern
         """
         # Step 1: Initialize target active concentrations for all species
-        target_concentrations = self._initialize_target_concentrations(active_percentage_range)
+        if not self._target_concentrations:
+            self._initialize_target_concentrations(active_percentage_range)
+        else: 
+            print("Using existing target concentrations")
+        # else just use existing target concentrations
+        target_concentrations = self._target_concentrations
         
         # Step 2: Process each activated species to determine parameters
         parameter_values = {}
@@ -183,7 +189,7 @@ class KineticParameterTuner:
             regulators = self._identify_regulators(active_state, forward_params)
             
             # Step 4: Solve for parameters using the corrected kinetic equations
-            state_params = self._solve_state_parameters(
+            state_params = self._solve_state_parameters_corrected(
                 active_state=active_state,
                 X_total=X_total,
                 p_target=p_target,
@@ -262,6 +268,8 @@ class KineticParameterTuner:
             X_a_target = p * X_total
             
             target_concentrations[active_state] = X_a_target
+            
+        self._target_concentrations = target_concentrations
         
         return target_concentrations
     
@@ -292,7 +300,7 @@ class KineticParameterTuner:
         # Default to 0 if regulator not found
         return 0.0
     
-    def _solve_state_parameters(
+    def _solve_state_parameters_corrected(
         self,
         active_state: str,
         X_total: float,
@@ -412,33 +420,11 @@ class KineticParameterTuner:
         
         return new_model
 
-
-def generate_parameters(
-    model: ModelBuilder,
-    active_percentage_range: Tuple[float, float] = (0.3, 0.7),
-    X_total_multiplier: float = 5.0,
-    ki_val: float = 100.0,
-    v_max_f_random_range: Tuple[float, float] = (5.0, 10.0),
-    random_seed: Optional[int] = None
-) -> Dict[str, float]:
-    """
-    Convenience function for generating tuned kinetic parameters.
-    
-    Args:
-        model: ModelBuilder object with network structure
-        active_percentage_range: Range for target active percentages
-        X_total_multiplier: Multiplier for setting km_b = X_total × multiplier
-        ki_val: Constant value for all inhibition constants Ki
-        v_max_f_random_range: Range for total forward vmax
-        random_seed: Optional seed for reproducible parameter generation
+    def get_target_concentrations(self) -> Dict[str, float]:
+        """
+        Get the target active concentrations for all species.
         
-    Returns:
-        Dictionary mapping parameter names to tuned values
-    """
-    tuner = KineticParameterTuner(model, random_seed)
-    return tuner.generate_parameters(
-        active_percentage_range=active_percentage_range,
-        X_total_multiplier=X_total_multiplier,
-        ki_val=ki_val,
-        v_max_f_random_range=v_max_f_random_range
-    )
+        Returns:
+            Dictionary mapping active state names to target concentrations
+        """
+        return self._target_concentrations

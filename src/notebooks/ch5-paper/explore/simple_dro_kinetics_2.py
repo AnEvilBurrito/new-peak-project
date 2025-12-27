@@ -113,47 +113,6 @@ print(f"States: {list(model.states.keys())[:10]}...")  # Show first 10 states
 print(model.get_antimony_model())
 
 # %%
-# Parameters for linear signal propagation: R -> I -> O cascade
-# All Michaelis constants set high to operate in linear regime (Km >> substrate concentrations)
-# Total pools: R_total ≈ 123, I_total ≈ 126, O_total ≈ 94
-
-# 1. R module: Basal activation without drug
-# Target: R1a ≈ 0.5 × R_total when D=0 (to see clear signal)
-# k0 = Vmax_J0/Km_J0, k1 = Kc_J1/Km_J1
-model.set_parameter("Km_J0", 500)  # High Km for linear kinetics
-model.set_parameter("Vmax_J0", 50.0)  # Sets k0 = 0.1
-model.set_parameter("Km_J1", 500)  # High Km for linear kinetics
-model.set_parameter("Kc_J1", 50.0)  # Sets k1 = 0.1 → α_R = k1/(k0+k1) = 0.5
-model.set_parameter("Ki0_J1", 0.01)  # Strong inhibition by D: when D=1, k1 becomes k1/101
-
-# 2. I module: Activation by R1a, linear propagation
-# Target: I1_1a ≈ (k3/k2) × R1a × I_total, with (k3/k2) chosen for proper scaling
-# Ensure k3 × [R1a] ≪ k2 for linearity (use R1a_max ≈ 61.5)
-model.set_parameter("Km_J2", 500)  # High Km for linear kinetics
-model.set_parameter("Vmax_J2", 307.5)  # Sets k2 = 0.615 (Vmax_J2 = k2 × Km_J2)
-model.set_parameter("Km_J3", 500)  # High Km for linear kinetics
-model.set_parameter("Kc0_J3", 0.5)  # Sets k3 = 0.001 (Kc0_J3 = k3 × Km_J3)
-
-# 3. O module: Activation by I1_1a, linear propagation
-# Target: Oa ≈ (k5/k4) × I1_1a × O_total
-# Ensure k5 × [I1_1a] ≪ k4 for linearity (use I1_1a_max ≈ 12.6)
-model.set_parameter("Km_J4", 500)  # High Km for linear kinetics
-model.set_parameter("Vmax_J4", 63.0)  # Sets k4 = 0.126 (Vmax_J4 = k4 × Km_J4)
-model.set_parameter("Km_J5", 500)  # High Km for linear kinetics
-model.set_parameter("Kc0_J5", 0.5)  # Sets k5 = 0.001 (Kc0_J5 = k5 × Km_J5)
-
-# Initial conditions (using the default values from your model)
-# To test proportionality, you can vary R1 while keeping R_total constant
-# or vary both R1 and R1a to test different R_total
-model.set_state("R1", 123)  # R_total = R1 + R1a = 123
-model.set_state("R1a", 0)
-model.set_state("I1_1", 126)
-model.set_state("I1_1a", 0)
-model.set_state("O", 94)
-model.set_state("Oa", 0)
-
-
-# %%
 # Parameters for stronger signal propagation with minimal attenuation
 # Strategy: Reduce downstream deactivation rates and increase activation strengths
 # Target: R_active ~80, I_active ~80, O_active ~60-70 (O_total=94 limits max)
@@ -161,27 +120,27 @@ model.set_state("Oa", 0)
 # 1. R module: Maintain ~65% activation (R1a ≈ 80)
 ### --- Deactivation
 model.set_parameter("Km_J0", 500)  # Linear regime
-model.set_parameter("Vmax_J0", 27)  # k0 = 0.08
+model.set_parameter("Vmax_J0", 27)  
 ### --- Activation 
 model.set_parameter("Km_J1", 500)  # Linear regime
-model.set_parameter("Kc_J1", 50)  # k1 = 0.148 → α_R = 0.649
+model.set_parameter("Kc_J1", 50)  #
 model.set_parameter("Ki0_J1", 0.01)  # Strong drug inhibition
 
 # 2. I module: Reduce attenuation by decreasing deactivation and increasing activation
 ### --- Deactivation
 model.set_parameter("Km_J2", 500)  # Linear regime
-model.set_parameter("Vmax_J2", 21.5)  # Reduced from 100: k2 = 0.1 (slower I deactivation)
+model.set_parameter("Vmax_J2", 21.5)  #
 ### --- Activation
 model.set_parameter("Km_J3", 500)  # Linear regime
-model.set_parameter("Kc0_J3", 0.5)  # Increased from 0.794: k3 = 0.004 (stronger R→I activation)
+model.set_parameter("Kc0_J3", 0.5)  
 
 # 3. O module: Reduce attenuation similarly
 ### --- Deactivation
 model.set_parameter("Km_J4", 500)  # Linear regime
-model.set_parameter("Vmax_J4", 22)  # Reduced from 50: k4 = 0.05 (slower O deactivation)
+model.set_parameter("Vmax_J4", 22)  #
 ### --- Activation
 model.set_parameter("Km_J5", 500)  # Linear regime
-model.set_parameter("Kc0_J5", 0.5)  # Increased from 0.53: k5 = 0.002 (stronger I→O activation)
+model.set_parameter("Kc0_J5", 0.5)  # 
 
 # Initial conditions (using your original totals)
 model.set_state("R1", 123)
@@ -191,6 +150,56 @@ model.set_state("I1_1a", 0)
 model.set_state("O", 94)
 model.set_state("Oa", 0)
 
+
+# %%
+from models.utils.kinetic_tuner import KineticParameterTuner
+
+tuner = KineticParameterTuner(model, random_seed=42)
+
+tuner._initialize_target_concentrations(active_percentage_range=(0.6, 0.8))
+tuner._target_concentrations["R1a"] = 61.5  # 50% active
+tuner._target_concentrations["I1_1a"] = 75.6  # 60% active
+tuner._target_concentrations["Oa"] = 37.6  # 40% active
+
+updated_params = tuner.generate_parameters(active_percentage_range=(0.6, 0.8))  # Target 60-80% active states
+
+for param, value in updated_params.items():
+    print(f"Setting {param} to {value}")
+    model.set_parameter(param, value)
+    
+print(model.get_antimony_model())
+
+# %%
+target_concentration = tuner.get_target_concentrations()
+print("Target concentrations after tuning:")
+for state, conc in target_concentration.items():
+    print(f"  {state}: {conc:.2f}")
+
+# %%
+# Overwrite parameters with specified values
+# manual_params = {
+#     "Km_J0": 615,
+#     "Vmax_J0": 7.5,
+#     "Km_J1": 615,
+#     "Kc_J1": 7.5,
+#     "Ki0_J1": 0.01,
+#     "Km_J2": 630,
+#     "Vmax_J2": 5.0,
+#     "Km_J3": 630,
+#     "Kc0_J3": 0.122,
+#     "Km_J4": 470,
+#     "Vmax_J4": 11.25,
+#     "Km_J5": 470,
+#     "Kc0_J5": 0.0992,
+# }
+
+manual_params = {
+    "Ki0_J1": 0.01,
+}
+
+for p, v in manual_params.items():
+    model.set_parameter(p, v)
+    print(f"Set {p} = {v}")
 
 # %% [markdown]
 # ## 3. Test Basic Kinetics (Extended Timeframe)

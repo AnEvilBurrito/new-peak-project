@@ -55,6 +55,9 @@ class Reaction:
         self.product_names_to_archtype_names = self._direct_tuples_to_dict(products, reaction_archtype.products)
         self.extra_states_names_to_archtype_names = self._direct_tuples_to_dict(extra_states, reaction_archtype.extra_states)
 
+        # Compute regulator-parameter mapping
+        self.regulator_parameters, self.parameter_regulators = self._compute_regulator_parameter_mapping()
+
         if zero_init: 
             reactant_values = {i: 0 for i in self.reactants_names}
             product_values = {i: 0 for i in self.products_names}
@@ -125,6 +128,72 @@ class Reaction:
         maps a tuple of reaction-based names to the archtype-based names
         '''
         return {reaction_tuple[i]: archtype_tuple[i] for i in range(len(archtype_tuple))}
+
+    def _compute_regulator_parameter_mapping(self):
+        '''
+        Compute mapping between regulators (extra_states) and parameters.
+        Returns two dictionaries:
+            regulator_parameters: mapping actual extra_state name -> list of parameter base names
+            parameter_regulators: mapping parameter base name -> extra_state name
+        '''
+        regulator_parameters = {}
+        parameter_regulators = {}
+        # Prefix mapping based on ArchtypeCollections naming conventions
+        # Map parameter prefix to possible extra_state prefix letters (without leading &/?)
+        # Some parameter prefixes may map to multiple possibilities; we'll match the first that exists.
+        prefix_map = {
+            'Ka': ['A'],   # stimulators
+            'Kc': ['W'],   # stimulator_weak
+            'Ki': ['L', 'I'],   # allosteric_inhibitors (L) or mass action allo_inhibitors (I)
+            'Kic': ['I'],  # competitive_inhibitors
+            'Ks': ['A'],   # synthesis stimulators
+            'Kw': ['W'],   # mass action additive stimulators
+            'Kir': ['I'],  # reverse allosteric inhibitors
+            'Kcr': ['C'],  # reverse competitive inhibitors
+            'Kwr': ['W'],  # reverse additive stimulators
+            'Ksr': ['A'],  # reverse stimulators
+        }
+        import re
+        for param in self.archtype.parameters:
+            # Extract prefix and optional numeric suffix
+            match = re.match(r'([A-Za-z]+)(\d*)', param)
+            if not match:
+                continue
+            prefix = match.group(1)
+            suffix = match.group(2) if match.group(2) else ''
+            if prefix in prefix_map:
+                expected_prefix_list = prefix_map[prefix]
+                # Find extra_state with matching suffix and prefix
+                for arch_extra in self.archtype.extra_states:
+                    es_match = re.match(r'([&?])([A-Za-z]+)(\d*)', arch_extra)
+                    if es_match:
+                        es_prefix = es_match.group(2)
+                        es_suffix = es_match.group(3)
+                        if es_suffix == suffix and es_prefix in expected_prefix_list:
+                            # Map to actual extra_state name using extra_states_names_to_archtype_names inverse
+                            actual_extra = None
+                            for actual, arch in self.extra_states_names_to_archtype_names.items():
+                                if arch == arch_extra:
+                                    actual_extra = actual
+                                    break
+                            if actual_extra is not None:
+                                regulator_parameters.setdefault(actual_extra, []).append(param)
+                                parameter_regulators[param] = actual_extra
+                            break
+        return regulator_parameters, parameter_regulators
+
+    def get_parameters_for_regulator(self, regulator_name: str) -> list:
+        '''
+        Returns list of parameter base names associated with the given regulator.
+        '''
+        return self.regulator_parameters.get(regulator_name, [])
+
+    def get_regulator_for_parameter(self, param_name: str) -> str:
+        '''
+        Returns the regulator name associated with the given parameter base name.
+        Returns empty string if no association.
+        '''
+        return self.parameter_regulators.get(param_name, '')
 
     def get_reaction_parameters(self, r_index) -> Dict[str, float]:
         '''

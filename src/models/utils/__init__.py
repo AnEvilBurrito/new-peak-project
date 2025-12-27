@@ -11,6 +11,7 @@ from .parameter_mapper import (
 
 from .parameter_randomizer import ParameterRandomizer
 from .initial_condition_randomizer import InitialConditionRandomizer
+from .kinetic_tuner import KineticParameterTuner, generate_parameters
 
 __all__ = [
     'get_parameter_reaction_map',
@@ -18,5 +19,7 @@ __all__ = [
     'explain_reaction_parameters',
     'get_parameters_for_state',
     'ParameterRandomizer',
-    'InitialConditionRandomizer'
+    'InitialConditionRandomizer',
+    'KineticParameterTuner',
+    'generate_parameters'
 ]

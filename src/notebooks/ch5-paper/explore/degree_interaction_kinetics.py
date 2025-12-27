@@ -77,7 +77,7 @@ degree_spec = DegreeInteractionSpec(degree_cascades=[1, 2, 4])
 # Generate complete specifications with moderate feedback density
 degree_spec.generate_specifications(
     random_seed=42,
-    feedback_density=0.3  # 30% of cascades get upward feedback (mandatory downward always present)
+    feedback_density=1  # 30% of cascades get upward feedback (mandatory downward always present)
 )
 
 print(f"Network created with {len(degree_spec.species_list)} species")
@@ -146,6 +146,42 @@ print(f"Key states available: {available_states}")
 
 # %%
 print(model.get_antimony_model())
+
+# %% [markdown]
+# ## 4. Swapping parameters for Testing
+
+# %%
+from models.utils.parameter_mapper import get_parameters_for_state
+
+state_variables = model.get_state_variables()
+
+# filter all state variables with 'a' at the end
+state_variables = {k: v for k, v in state_variables.items() if k.endswith('a')}
+
+for state in state_variables.keys():
+    params = get_parameters_for_state(model, state)
+    forward_parameters = params['as_product']
+    backward_parameters = params['as_reactant']
+    
+    # extract 'km' from the backward parameters list 
+    km_b = [p for p in backward_parameters if p.startswith('Km')]
+    
+    # extract 'km' and also 'ki' from the forward parameters list
+    km_f = [p for p in forward_parameters if p.startswith('Km')]
+    ki_f = [p for p in forward_parameters if p.startswith('Ki')]
+    km_f = km_f + ki_f
+    
+    # extract 'vmax' and 'kc' from the forward parameters list
+    vmax_f = [p for p in forward_parameters if p.startswith('Vmax')]
+    kc_f = [p for p in forward_parameters if p.startswith('Kc')]
+    vmax_f = vmax_f + kc_f
+    
+    # extract 'vmax' from the backward parameters list
+    vmax_b = [p for p in backward_parameters if p.startswith('Vmax')]
+    print(f"State: {state}, Forward params: {forward_parameters}, Backward params: {backward_parameters}")
+    print(f"   km forward: {km_f}, km backward: {km_b}")
+    print(f"   vmax forward: {vmax_f}, vmax backward: {vmax_b}")
+
 
 # %% [markdown]
 # ## 5. Test Basic Functionality with Simulation

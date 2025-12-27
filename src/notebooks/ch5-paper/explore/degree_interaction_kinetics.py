@@ -72,11 +72,11 @@ print("Imports complete")
 
 # %%
 # Initialize degree interaction specification
-degree_spec = DegreeInteractionSpec(degree_cascades=[1,2,4,10])
+degree_spec = DegreeInteractionSpec(degree_cascades=[1,2,4,10,20,40])
 
 # Generate complete specifications with moderate feedback density
 degree_spec.generate_specifications(
-    random_seed=42,
+    random_seed=1,
     feedback_density=1  # 30% of cascades get upward feedback (mandatory downward always present)
 )
 

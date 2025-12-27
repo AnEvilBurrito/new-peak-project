@@ -72,7 +72,7 @@ print("Imports complete")
 
 # %%
 # Initialize degree interaction specification
-degree_spec = DegreeInteractionSpec(degree_cascades=[1])
+degree_spec = DegreeInteractionSpec(degree_cascades=[1,2,4,10])
 
 # Generate complete specifications with moderate feedback density
 degree_spec.generate_specifications(
@@ -105,7 +105,7 @@ for reg in all_regulations:
 drug_d = Drug(
     name="D",
     start_time=5000.0,     # Drug applied at time 500
-    default_value=1000.0,    # Drug concentration
+    default_value=100.0,    # Drug concentration
     regulation=["R1_1"],  # Regulates R1_1 (degree 1, cascade 1)
     regulation_type=["down"]  # Down-regulation decreases activation
 )
@@ -214,6 +214,17 @@ target_concentrations = tuner.get_target_concentrations()
 for t in target_concentrations.items():
     print(f"Target concentration for {t[0]}: {t[1]:.3f}")
 
+# %%
+from models.utils.parameter_mapper import get_parameters_for_state
+
+regulator_parameter_map = model.get_regulator_parameter_map()
+drug_map = regulator_parameter_map.get("D", {})
+drug_param = drug_map[0]
+print(f"Drug D regulates parameters: {drug_map[0]}")
+
+model.set_parameter(drug_param, 0.01)  # Set to 0 to simulate drug effect
+
+
 # %% [markdown]
 # ## 5. Test Basic Functionality with Simulation
 #
@@ -244,11 +255,12 @@ except Exception as e:
 print("Target Concentration Achievement Analysis")
 print("=" * 60)
 
-last_timepoint = result.iloc[-1]  # Get last row of simulation results
+last_timepoint_pre_drug = result.iloc[-51]  # Get last row of simulation results before drug treatment 
+last_timepoint_post_drug = result.iloc[-1]  # Get last row of simulation results after drug treatment
 
 for species, target in target_concentrations.items():
     if species in result.columns:
-        final_value = last_timepoint[species]
+        final_value = last_timepoint_pre_drug[species]
         difference = final_value - target
         percent_diff = (difference / target) * 100 if target != 0 else 0
         
@@ -281,46 +293,46 @@ if 'result' in locals():
     plt.grid(True, alpha=0.3)
     
     # Subplot 2: Degree 2 (feedback to degree 1)
-    # plt.subplot(2, 2, 2)
-    # plt.plot(result['time'], result['R2_1'], label='R2_1 (inactive)', color='blue', alpha=0.7)
-    # plt.plot(result['time'], result['R2_1a'], label='R2_1a (active)', color='cyan', alpha=0.7)
-    # plt.plot(result['time'], result['I2_1'], label='I2_1 (inactive)', color='green', alpha=0.7)
-    # plt.plot(result['time'], result['I2_1a'], label='I2_1a (active)', color='lime', alpha=0.7)
-    # plt.axvline(x=5000, color='gray', linestyle='--', alpha=0.7, label='Drug D applied')
-    # plt.xlabel('Time')
-    # plt.ylabel('Concentration')
-    # plt.title('Degree 2: Feedback Cascade 1')
-    # plt.legend(loc='upper right', fontsize=8)
-    # plt.grid(True, alpha=0.3)
+    plt.subplot(2, 2, 2)
+    plt.plot(result['time'], result['R2_1'], label='R2_1 (inactive)', color='blue', alpha=0.7)
+    plt.plot(result['time'], result['R2_1a'], label='R2_1a (active)', color='cyan', alpha=0.7)
+    plt.plot(result['time'], result['I2_1'], label='I2_1 (inactive)', color='green', alpha=0.7)
+    plt.plot(result['time'], result['I2_1a'], label='I2_1a (active)', color='lime', alpha=0.7)
+    plt.axvline(x=5000, color='gray', linestyle='--', alpha=0.7, label='Drug D applied')
+    plt.xlabel('Time')
+    plt.ylabel('Concentration')
+    plt.title('Degree 2: Feedback Cascade 1')
+    plt.legend(loc='upper right', fontsize=8)
+    plt.grid(True, alpha=0.3)
     
     # Subplot 3: Degree 3 (feedback to degree 2)
-    # plt.subplot(2, 2, 3)
-    # plt.plot(result['time'], result['R3_1'], label='R3_1 (inactive)', color='blue', alpha=0.7)
-    # plt.plot(result['time'], result['R3_1a'], label='R3_1a (active)', color='cyan', alpha=0.7)
-    # plt.plot(result['time'], result['I3_1'], label='I3_1 (inactive)', color='green', alpha=0.7)
-    # plt.plot(result['time'], result['I3_1a'], label='I3_1a (active)', color='lime', alpha=0.7)
-    # plt.axvline(x=500, color='gray', linestyle='--', alpha=0.7, label='Drug D applied')
-    # plt.xlabel('Time')
-    # plt.ylabel('Concentration')
-    # plt.title('Degree 3: Feedback Cascade 1')
-    # plt.legend(loc='upper right', fontsize=8)
-    # plt.grid(True, alpha=0.3)
+    plt.subplot(2, 2, 3)
+    plt.plot(result['time'], result['R3_1'], label='R3_1 (inactive)', color='blue', alpha=0.7)
+    plt.plot(result['time'], result['R3_1a'], label='R3_1a (active)', color='cyan', alpha=0.7)
+    plt.plot(result['time'], result['I3_1'], label='I3_1 (inactive)', color='green', alpha=0.7)
+    plt.plot(result['time'], result['I3_1a'], label='I3_1a (active)', color='lime', alpha=0.7)
+    plt.axvline(x=500, color='gray', linestyle='--', alpha=0.7, label='Drug D applied')
+    plt.xlabel('Time')
+    plt.ylabel('Concentration')
+    plt.title('Degree 3: Feedback Cascade 1')
+    plt.legend(loc='upper right', fontsize=8)
+    plt.grid(True, alpha=0.3)
     
     # Subplot 4: Drug effect summary
-    # plt.subplot(2, 2, 4)
-    # active_species = ['R1_1a', 'I1_1a', 'Oa', 'R2_1a', 'I2_1a', 'R3_1a', 'I3_1a']
-    # colors = plt.cm.Set3(np.linspace(0, 1, len(active_species)))
+    plt.subplot(2, 2, 4)
+    active_species = ['R1_1a', 'I1_1a', 'Oa', 'R2_1a', 'I2_1a', 'R3_1a', 'I3_1a']
+    colors = plt.cm.Set3(np.linspace(0, 1, len(active_species)))
     
-    # for i, species in enumerate(active_species):
-    #     if species in result.columns:
-    #         plt.plot(result['time'], result[species], label=species, color=colors[i], alpha=0.8)
+    for i, species in enumerate(active_species):
+        if species in result.columns:
+            plt.plot(result['time'], result[species], label=species, color=colors[i], alpha=0.8)
     
-    # plt.axvline(x=500, color='gray', linestyle='--', alpha=0.7, label='Drug D applied')
-    # plt.xlabel('Time')
-    # plt.ylabel('Active Concentration')
-    # plt.title('Active Species Across All Degrees')
-    # plt.legend(loc='upper right', fontsize=7)
-    # plt.grid(True, alpha=0.3)
+    plt.axvline(x=500, color='gray', linestyle='--', alpha=0.7, label='Drug D applied')
+    plt.xlabel('Time')
+    plt.ylabel('Active Concentration')
+    plt.title('Active Species Across All Degrees')
+    plt.legend(loc='upper right', fontsize=7)
+    plt.grid(True, alpha=0.3)
     
     plt.tight_layout()
     plt.show()

@@ -1,1 +1,4 @@
-you should not execute long commands, as it will most likely fail, instead write them into the @/src\tests folder, and then execute it instead
+- you should not execute long commands, as it will most likely fail, instead write them into the @/src\tests folder, and then execute it instead
+- commands should be less than 200 characters
+- if you need to run a long command, split it into multiple smaller commands
+- also activate the `new-peak-project` python environment before running tests, tests are managed by pytest

@@ -1,17 +1,17 @@
 """
-Kinetic parameter tuner for multi-degree drug interaction networks.
+Kinetic parameter tuner for multi-degree interaction networks.
 
 This module provides utilities to generate kinetic parameters that ensure
 robust signal propagation through hierarchical networks by solving the
 full nonlinear kinetic equations to achieve target active percentages.
+Drug concentrations are not considered in the tuning process.
 
 Algorithm Overview:
 1. For each species X, randomly assign active percentage p ∈ active_percentage_range
 2. Compute target active concentration [X_a] = p × X_total
-3. Parse drug concentrations from model.variables (piecewise assignments)
-4. For each activated species Xa:
+3. For each activated species Xa:
    a. Identify forward parameters (kc_i values) and backward parameters (vmax_b)
-   b. Get regulator active concentrations [Y_i_a] from conc_target or drug_concentrations
+   b. Get regulator active concentrations [Y_i_a] from target concentrations
    c. Solve: p = (Σ kc_i × [Y_i_a]) / (Σ kc_i × [Y_i_a] + vmax_b)
    d. Determine individual kc_i values: kc_i = constant / [Y_i_a] (equal contribution)
    e. Set km_b = X_total × X_total_multiplier
@@ -33,11 +33,10 @@ independent set of parameters (no parameter sharing between species), which
 is the typical pattern in the DegreeInteractionSpec networks.
 """
 
-import re
-from typing import Dict, List, Tuple, Optional, Union
+from typing import Dict, List, Tuple, Optional, Union, Set
 import numpy as np
 from ..ModelBuilder import ModelBuilder
-from .parameter_mapper import get_parameters_for_state, get_parameter_reaction_map
+from .parameter_mapper import get_parameters_for_state
 
 
 class KineticParameterTuner:
@@ -72,37 +71,58 @@ class KineticParameterTuner:
         self.active_states = {k: v for k, v in self.all_states.items() if k.endswith('a')}
         self.inactive_states = {k: v for k, v in self.all_states.items() if not k.endswith('a')}
         
-        # Parse drug concentrations from model.variables
-        self.drug_concentrations = self._parse_drug_concentrations()
-        self._target_concentrations = {}
+        # Get regulator-parameter mappings from ModelBuilder
+        self.regulator_param_map = model.get_regulator_parameter_map()
+        self.param_regulator_map = model.get_parameter_regulator_map()
         
-        # Get parameter-reaction map for regulator identification
-        self.param_map = get_parameter_reaction_map(model)
+        # Parse drug concentrations from model variables
+        self.drug_concentrations = self._parse_drug_concentrations(model)
+        self._target_concentrations = {}
         
         # Validate that each active state has a corresponding inactive state
         self._validate_state_pairs()
     
-    def _parse_drug_concentrations(self) -> Dict[str, float]:
+    def _parse_drug_concentrations(self, model: ModelBuilder) -> Dict[str, float]:
         """
-        Parse drug concentrations from model.variables piecewise assignments.
+        Parse drug concentrations from model variables.
         
+        Looks for piecewise functions in model.variables and extracts
+        the default (before activation) concentration.
+        
+        Args:
+            model: ModelBuilder object
+            
         Returns:
-            Dictionary mapping drug names to their concentrations (after_value)
+            Dictionary mapping drug names to their concentrations
         """
         drug_concentrations = {}
         
-        # Regex pattern for piecewise assignment: 'D := piecewise(0, time < 500, 10)'
-        pattern = r'(\w+)\s*:=\s*piecewise\(([^,]+),\s*time\s*<\s*([^,]+),\s*([^)]+)\)'
-        
-        for var_name, rule in self.model.variables.items():
-            match = re.match(pattern, rule.strip())
-            if match:
-                state_name, before_value, activation_time, after_value = match.groups()
+        # Check model variables for piecewise functions
+        for var_name, var_expression in model.variables.items():
+            # Look for piecewise patterns
+            if 'piecewise' in var_expression.lower():
+                # Try to parse: var_name := piecewise(before_value, time < activation_time, after_value)
                 try:
-                    drug_concentrations[state_name] = float(after_value)
-                except ValueError:
-                    # If conversion fails, skip this variable
-                    continue
+                    # Extract the before_value (default concentration)
+                    # Simple parsing - find the first number after 'piecewise('
+                    import re
+                    match = re.search(r'piecewise\(([^,]+)', var_expression)
+                    if match:
+                        before_value_str = match.group(1).strip()
+                        # Try to convert to float
+                        try:
+                            before_value = float(before_value_str)
+                            drug_concentrations[var_name] = before_value
+                        except ValueError:
+                            # Might be a variable name or expression
+                            # Check if it's a number in the expression
+                            num_match = re.search(r'[-+]?\d*\.?\d+', before_value_str)
+                            if num_match:
+                                before_value = float(num_match.group())
+                                drug_concentrations[var_name] = before_value
+                except Exception as e:
+                    # If parsing fails, continue with other variables
+                    print(f"Warning: Could not parse drug concentration for {var_name}: {e}")
         
         return drug_concentrations
     
@@ -143,7 +163,7 @@ class KineticParameterTuner:
             self._initialize_target_concentrations(active_percentage_range)
         else: 
             print("Using existing target concentrations")
-        # else just use existing target concentrations
+        
         target_concentrations = self._target_concentrations
         
         # Step 2: Process each activated species to determine parameters
@@ -185,11 +205,11 @@ class KineticParameterTuner:
             if len(vmax_b) > 1:
                 raise ValueError(f"Multiple backward Vmax found for state {active_state}: {vmax_b}")
             
-            # Step 3: Try to identify regulators for this state
-            regulators = self._identify_regulators(active_state, forward_params)
+            # Step 3: Identify regulators for this state using ModelBuilder mapping
+            regulators = self._identify_regulators_for_state(active_state, forward_params)
             
             # Step 4: Solve for parameters using the corrected kinetic equations
-            state_params = self._solve_state_parameters_corrected(
+            state_params = self._solve_state_parameters(
                 active_state=active_state,
                 X_total=X_total,
                 p_target=p_target,
@@ -208,35 +228,44 @@ class KineticParameterTuner:
         
         return parameter_values
     
-    def _identify_regulators(self, active_state: str, forward_params: List[str]) -> List[str]:
+    def _identify_regulators_for_state(self, active_state: str, forward_params: List[str]) -> Dict[str, List[str]]:
         """
-        Identify regulators for a given activated state.
+        Identify regulators for a given activated state using ModelBuilder mapping.
         
-        Attempts to find regulator species by examining reaction structure.
-        Returns empty list if regulators cannot be identified.
+        Returns a dictionary with regulator types:
+        {
+            'stimulators': [list of stimulator species],
+            'inhibitors': [list of inhibitor species]
+        }
         
         Args:
             active_state: Name of the activated species
             forward_params: List of forward parameter names
             
         Returns:
-            List of regulator species names (may be empty if cannot identify)
+            Dictionary of regulator lists by type
         """
-        regulators = []
+        regulators = {'stimulators': [], 'inhibitors': []}
         
-        # Try to find the reaction that produces this active state
+        # Get all parameters that produce this active state
         for param_name in forward_params:
-            param_info = self.param_map.get(param_name)
-            if param_info:
-                reaction_idx = param_info.get('reaction_index')
-                if reaction_idx is not None and reaction_idx < len(self.model.reactions):
-                    reaction = self.model.reactions[reaction_idx]
-                    # Check if this reaction produces the active state
-                    if active_state in reaction.products_names:
-                        # extra_states may contain regulators
-                        if hasattr(reaction, 'extra_states') and reaction.extra_states:
-                            regulators.extend(reaction.extra_states)
-                        break
+            # Check if this parameter has a regulator
+            regulator = self.param_regulator_map.get(param_name)
+            if regulator:
+                # Determine if this regulator is a stimulator or inhibitor
+                # based on parameter prefix
+                if param_name.startswith(('Kc', 'Ka', 'Ks', 'Kw', 'Vmax')):
+                    # Stimulator parameters
+                    if regulator not in regulators['stimulators']:
+                        regulators['stimulators'].append(regulator)
+                elif param_name.startswith(('Ki', 'Kic', 'Kil', 'Kir')):
+                    # Inhibitor parameters
+                    if regulator not in regulators['inhibitors']:
+                        regulators['inhibitors'].append(regulator)
+                elif param_name.startswith('Km'):
+                    # Km parameters may be associated with either, check context
+                    # For now, treat as neutral
+                    pass
         
         return regulators
     
@@ -282,12 +311,8 @@ class KineticParameterTuner:
             target_concentrations: Dictionary of target active concentrations
             
         Returns:
-            Regulator concentration (active form if available, otherwise from drug_concentrations)
+            Regulator concentration (active form if available, otherwise inactive form)
         """
-        # Check if regulator is a drug
-        if regulator in self.drug_concentrations:
-            return self.drug_concentrations[regulator]
-        
         # Check if regulator has active form
         active_regulator = regulator + 'a' if not regulator.endswith('a') else regulator
         if active_regulator in target_concentrations:
@@ -300,13 +325,13 @@ class KineticParameterTuner:
         # Default to 0 if regulator not found
         return 0.0
     
-    def _solve_state_parameters_corrected(
+    def _solve_state_parameters(
         self,
         active_state: str,
         X_total: float,
         p_target: float,
         all_vmax_f: List[str],
-        regulators: List[str],
+        regulators: Dict[str, List[str]],
         vmax_b_param: str,
         all_km_f: List[str],
         km_b_params: List[str],
@@ -323,7 +348,7 @@ class KineticParameterTuner:
             X_total: Total concentration of the species (inactive + active)
             p_target: Target active percentage [X_a]/X_total
             all_vmax_f: List of forward Vmax/Kc parameter names
-            regulators: List of regulator species names
+            regulators: Dictionary of regulator species by type
             vmax_b_param: Backward Vmax parameter name
             all_km_f: List of forward Km/Ki parameter names
             km_b_params: List of backward Km parameter names
@@ -352,35 +377,67 @@ class KineticParameterTuner:
         parameter_values[vmax_b_param] = vmax_b_value
         
         # Step 4: Distribute total_vmax_f among forward parameters
+        stimulators = regulators.get('stimulators', [])
         if all_vmax_f:
-            # If we have regulators identified, try to distribute based on regulator concentrations
-            if regulators and len(regulators) == len(all_vmax_f):
-                # Get regulator concentrations
-                regulator_concs = []
-                for regulator in regulators:
-                    conc = self._get_regulator_concentration(regulator, target_concentrations)
-                    regulator_concs.append(conc)
-                
-                # Avoid division by zero
-                regulator_concs = [max(conc, 1e-6) for conc in regulator_concs]
-                
-                # Distribute total_vmax_f so that kc_i × [Y_i_a] are equal
-                # Solve: kc_i = constant / [Y_i_a] where constant = total_vmax_f / n
-                n_regulators = len(regulators)
-                constant_per_regulator = total_vmax_f / n_regulators
-                
-                for i, param in enumerate(all_vmax_f):
-                    if i < len(regulator_concs):
-                        kc_value = constant_per_regulator / regulator_concs[i]
-                        parameter_values[param] = kc_value
+            # Separate Vmax and Kc parameters
+            vmax_params = [p for p in all_vmax_f if p.startswith('Vmax')]
+            kc_params = [p for p in all_vmax_f if p.startswith('Kc')]
+            
+            # For Vmax parameters: assign directly (they're constants, not multiplied by regulator)
+            # For Kc parameters: need to multiply by regulator concentration
+            
+            if kc_params:
+                # We have Kc parameters that need regulator concentrations
+                if stimulators and len(stimulators) >= len(kc_params):
+                    # Get stimulator concentrations for Kc parameters
+                    stimulator_concs = []
+                    for i in range(len(kc_params)):
+                        stimulator = stimulators[i] if i < len(stimulators) else stimulators[0]
+                        conc = self._get_regulator_concentration(stimulator, target_concentrations)
+                        stimulator_concs.append(conc)
+                    
+                    # Avoid division by zero
+                    stimulator_concs = [max(conc, 1e-6) for conc in stimulator_concs]
+                    
+                    # Distribute total_vmax_f among Kc parameters so that kc_i × [Y_i_a] are equal
+                    # First, allocate some portion to Vmax parameters if they exist
+                    vmax_portion = 0.0
+                    if vmax_params:
+                        # Reserve a small portion for Vmax parameters
+                        vmax_portion = total_vmax_f * 0.2  # 20% for Vmax
+                        kc_portion = total_vmax_f - vmax_portion
                     else:
-                        # Fallback: equal distribution
-                        parameter_values[param] = total_vmax_f / len(all_vmax_f)
+                        kc_portion = total_vmax_f
+                    
+                    # Distribute kc_portion among Kc parameters
+                    n_kc = len(kc_params)
+                    constant_per_kc = kc_portion / n_kc
+                    
+                    for i, param in enumerate(kc_params):
+                        if i < len(stimulator_concs):
+                            kc_value = constant_per_kc / stimulator_concs[i]
+                            parameter_values[param] = kc_value
+                        else:
+                            # Fallback: use average concentration
+                            avg_conc = sum(stimulator_concs) / len(stimulator_concs) if stimulator_concs else 1.0
+                            kc_value = constant_per_kc / avg_conc
+                            parameter_values[param] = kc_value
+                    
+                    # Distribute vmax_portion among Vmax parameters
+                    if vmax_params:
+                        vmax_per_param = vmax_portion / len(vmax_params)
+                        for param in vmax_params:
+                            parameter_values[param] = vmax_per_param
+                else:
+                    # No stimulators identified or mismatch - use simplified distribution
+                    vmax_f_per_param = total_vmax_f / len(all_vmax_f)
+                    for param in all_vmax_f:
+                        parameter_values[param] = vmax_f_per_param
             else:
-                # Simplified: distribute equally among all forward parameters
-                vmax_f_per_param = total_vmax_f / len(all_vmax_f)
-                for param in all_vmax_f:
-                    parameter_values[param] = vmax_f_per_param
+                # Only Vmax parameters (no Kc)
+                vmax_per_param = total_vmax_f / len(vmax_params)
+                for param in vmax_params:
+                    parameter_values[param] = vmax_per_param
         
         # Step 5: Set backward Km parameters
         km_b_value = X_total * X_total_multiplier
@@ -388,16 +445,32 @@ class KineticParameterTuner:
             parameter_values[param] = km_b_value
         
         # Step 6: Set forward Km and Ki parameters with corrected calculation
-        # km_f = km_b × (1 + Σ [inhibitor_a]/ki_val)
-        # We need to identify which regulators are inhibitors (affect denominator)
-        # For now, use simplified approach
+        # According to competitive inhibition kinetics: v = Vmax * S / (Km * (1 + I/Ki) + S)
+        # To achieve target steady state with inhibitors, we need: km_f × (1 + Σ [inhibitor_a]/ki_val) ≈ km_b
+        # Therefore: km_f = km_b / (1 + Σ [inhibitor_a]/ki_val)
+        inhibitors = regulators.get('inhibitors', [])
+        
+        # Calculate inhibitor sum term
+        inhibitor_sum = 0.0
+        for inhibitor in inhibitors:
+            inhibitor_conc = self._get_regulator_concentration(inhibitor, target_concentrations)
+            inhibitor_sum += inhibitor_conc / ki_val
+        
+        # Avoid division by zero
+        inhibitor_denominator = 1.0 + inhibitor_sum
+        if inhibitor_denominator == 0:
+            inhibitor_denominator = 1.0
+        
+        # Apply formula: km_f = km_b / (1 + Σ [inhibitor_a]/ki_val)
+        km_f_value = km_b_value / inhibitor_denominator
+        
         for param in all_km_f:
             if param.startswith('Ki'):
+                # Ki parameters are set to constant ki_val
                 parameter_values[param] = ki_val
             else:  # Km parameter
-                # Simplified: set equal to km_b_value
-                # TODO: Implement proper km_f calculation with inhibitor concentrations
-                parameter_values[param] = km_b_value
+                # Apply the calculated km_f value
+                parameter_values[param] = km_f_value
         
         return parameter_values
     
@@ -428,3 +501,37 @@ class KineticParameterTuner:
             Dictionary mapping active state names to target concentrations
         """
         return self._target_concentrations
+
+
+def generate_parameters(
+    model,
+    active_percentage_range: Tuple[float, float] = (0.3, 0.7),
+    X_total_multiplier: float = 5.0,
+    ki_val: float = 100.0,
+    v_max_f_random_range: Tuple[float, float] = (5.0, 10.0),
+    random_seed: Optional[int] = None
+) -> Dict[str, float]:
+    """
+    Generate kinetic parameters to achieve target active percentages.
+    
+    This is a convenience function that creates a KineticParameterTuner
+    and calls its generate_parameters method.
+    
+    Args:
+        model: ModelBuilder object with network structure
+        active_percentage_range: Range for target active percentages (e.g., (0.3, 0.7))
+        X_total_multiplier: Multiplier for setting km_b = X_total × multiplier
+        ki_val: Constant value for all inhibition constants Ki
+        v_max_f_random_range: Range for total forward vmax (Σ kc_i × [Y_i_a])
+        random_seed: Optional seed for reproducible parameter generation
+        
+    Returns:
+        Dictionary mapping parameter names to tuned values
+    """
+    tuner = KineticParameterTuner(model, random_seed)
+    return tuner.generate_parameters(
+        active_percentage_range=active_percentage_range,
+        X_total_multiplier=X_total_multiplier,
+        ki_val=ki_val,
+        v_max_f_random_range=v_max_f_random_range
+    )

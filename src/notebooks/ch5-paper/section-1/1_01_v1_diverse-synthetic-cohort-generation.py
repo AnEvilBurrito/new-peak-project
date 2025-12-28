@@ -55,6 +55,8 @@ notebook_config = {
     'section_number': section_number
 }
 
+# Calculate notebook path for S3 storage
+notebook_path = f'{exp_number}_{version_number}_{notebook_name}'
 
 # Define experiment configuration with full processing pipeline
 exp_config = {
@@ -86,7 +88,7 @@ exp_config = {
     },
     'parameter_generation': {
         'ic_range': [200, 1000],
-        'param_range': [0.1, 10],
+        'param_range': [0.5, 2],
         'param_mul_range': [0.99, 1.01]
     },
     'parameter_sampling': {

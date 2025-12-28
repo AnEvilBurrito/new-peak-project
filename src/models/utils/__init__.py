@@ -55,6 +55,7 @@ from .data_generation_helpers import (
     create_feature_target_pipeline,
     make_target_data_with_params,
     make_data,
+    make_data_extended,
     generate_batch_alternatives
 )
 
@@ -95,6 +96,7 @@ __all__ = [
     'create_feature_target_pipeline',
     'make_target_data_with_params',
     'make_data',
+    'make_data_extended',
     'generate_batch_alternatives',
     
     # Deprecated functions (for backward compatibility)

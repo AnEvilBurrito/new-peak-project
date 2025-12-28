@@ -192,8 +192,9 @@ def make_target_data_with_params(
     simulation_params: Dict[str, Any] = None,
     n_cores: int = 1,
     outcome_var: str = 'Cp',
+    capture_all_species: bool = False,
     verbose: bool = False
-) -> Tuple[pd.DataFrame, List[np.ndarray]]:
+) -> Tuple[pd.DataFrame, Union[List[np.ndarray], pd.DataFrame]]:
     """
     Generate target data with optional kinetic parameter perturbation.
     
@@ -205,10 +206,14 @@ def make_target_data_with_params(
         simulation_params: Dictionary with 'start', 'end', 'points' keys
         n_cores: Number of cores for parallel processing (-1 for all cores)
         outcome_var: Variable to extract as target
+        capture_all_species: If True, returns DataFrame with timecourses for all species.
+                           If False, returns list of arrays for outcome_var only.
         verbose: Whether to show progress bar
         
     Returns:
         Tuple of (target_df, time_course_data)
+        time_course_data is either List[np.ndarray] (if capture_all_species=False) 
+        or pd.DataFrame (if capture_all_species=True)
     """
     # Set default simulation parameters
     if simulation_params is None:
@@ -222,8 +227,38 @@ def make_target_data_with_params(
     end = simulation_params['end']
     points = simulation_params['points']
     
-    def simulate_perturbation(i: int) -> Tuple[float, np.ndarray]:
-        """Simulate a single perturbation with optional kinetic parameters."""
+    # Determine species to capture
+    species_to_capture = []
+    if capture_all_species:
+        # Instead of trying to get species from model_spec (deprecated method),
+        # we'll capture all species that appear in simulation results.
+        # We'll do an initial simulation to discover available species
+        try:
+            # Use first row of feature_df to get simulation results format
+            test_values = feature_df.iloc[0].to_dict()
+            solver.set_state_values(test_values)
+            if parameter_df is not None:
+                test_param_values = parameter_df.iloc[0].to_dict()
+                solver.set_parameter_values(test_param_values)
+            
+            test_res = solver.simulate(start, end, points)
+            
+            # Capture all columns except 'time' and any drug columns
+            all_columns = list(test_res.columns)
+            species_to_capture = [col for col in all_columns if col != 'time' and col != outcome_var]
+            
+            # Also include outcome_var if not already included
+            if outcome_var not in species_to_capture:
+                species_to_capture.append(outcome_var)
+                
+        except Exception as e:
+            # If test simulation fails, fall back to empty list
+            # We'll still try to capture species from actual simulations
+            warnings.warn(f"Could not discover species from test simulation: {e}")
+            species_to_capture = []
+    
+    def simulate_perturbation_single(i: int) -> Tuple[float, np.ndarray]:
+        """Simulate a single perturbation and capture only outcome_var."""
         perturbed_values = feature_df.iloc[i].to_dict()
         
         # Set perturbed initial values into solver
@@ -243,33 +278,91 @@ def make_target_data_with_params(
         
         return target_value, time_course
     
-    # Use parallel processing if requested
-    if n_cores > 1 or n_cores == -1:
-        results = Parallel(n_jobs=n_cores)(
-            delayed(simulate_perturbation)(i)
+    def simulate_perturbation_all_species(i: int) -> Tuple[float, Dict[str, np.ndarray]]:
+        """Simulate a single perturbation and capture timecourses for all species."""
+        perturbed_values = feature_df.iloc[i].to_dict()
+        
+        # Set perturbed initial values into solver
+        solver.set_state_values(perturbed_values)
+        
+        # Set perturbed kinetic parameters if provided
+        if parameter_df is not None:
+            parameter_values = parameter_df.iloc[i].to_dict()
+            solver.set_parameter_values(parameter_values)
+        
+        # Run simulation
+        res = solver.simulate(start, end, points)
+        
+        # Extract target value
+        target_value = res[outcome_var].iloc[-1]
+        
+        # Capture timecourses for all species
+        time_courses = {}
+        for species in species_to_capture:
+            if species in res.columns:
+                time_courses[species] = res[species].values
+        
+        return target_value, time_courses
+    
+    if capture_all_species:
+        # Use parallel processing if requested
+        if n_cores > 1 or n_cores == -1:
+            results = Parallel(n_jobs=n_cores)(
+                delayed(simulate_perturbation_all_species)(i)
+                for i in tqdm(range(feature_df.shape[0]), 
+                             desc='Simulating perturbations', 
+                             disable=not verbose)
+            )
+            all_targets, time_course_dicts = zip(*results)
+            all_targets = list(all_targets)
+            time_course_dicts = list(time_course_dicts)
+        else:
+            # Sequential processing
+            all_targets = []
+            time_course_dicts = []
+            
             for i in tqdm(range(feature_df.shape[0]), 
                          desc='Simulating perturbations', 
-                         disable=not verbose)
-        )
-        all_targets, time_course_data = zip(*results)
-        all_targets = list(all_targets)
-        time_course_data = list(time_course_data)
-    else:
-        # Sequential processing
-        all_targets = []
-        time_course_data = []
+                         disable=not verbose):
+                target_value, time_courses = simulate_perturbation_all_species(i)
+                all_targets.append(target_value)
+                time_course_dicts.append(time_courses)
         
-        for i in tqdm(range(feature_df.shape[0]), 
-                     desc='Simulating perturbations', 
-                     disable=not verbose):
-            target_value, time_course = simulate_perturbation(i)
-            all_targets.append(target_value)
-            time_course_data.append(time_course)
-    
-    # Create target DataFrame
-    target_df = pd.DataFrame(all_targets, columns=[outcome_var])
-    
-    return target_df, time_course_data
+        # Create target DataFrame
+        target_df = pd.DataFrame(all_targets, columns=[outcome_var])
+        
+        # Create timecourse DataFrame
+        timecourse_df = pd.DataFrame(time_course_dicts)
+        
+        return target_df, timecourse_df
+    else:
+        # Use parallel processing if requested
+        if n_cores > 1 or n_cores == -1:
+            results = Parallel(n_jobs=n_cores)(
+                delayed(simulate_perturbation_single)(i)
+                for i in tqdm(range(feature_df.shape[0]), 
+                             desc='Simulating perturbations', 
+                             disable=not verbose)
+            )
+            all_targets, time_course_data = zip(*results)
+            all_targets = list(all_targets)
+            time_course_data = list(time_course_data)
+        else:
+            # Sequential processing
+            all_targets = []
+            time_course_data = []
+            
+            for i in tqdm(range(feature_df.shape[0]), 
+                         desc='Simulating perturbations', 
+                         disable=not verbose):
+                target_value, time_course = simulate_perturbation_single(i)
+                all_targets.append(target_value)
+                time_course_data.append(time_course)
+        
+        # Create target DataFrame
+        target_df = pd.DataFrame(all_targets, columns=[outcome_var])
+        
+        return target_df, time_course_data
 
 
 def generate_batch_alternatives(base_values: Dict[str, float], 
@@ -322,8 +415,10 @@ def make_data(
     resample_size: int = 10,
     max_retries: int = 3,
     require_all_successful: bool = False,
+    return_details: bool = False,
+    capture_all_species: bool = False,
     **kwargs
-) -> Tuple[pd.DataFrame, pd.DataFrame]:
+) -> Union[Tuple[pd.DataFrame, pd.DataFrame], Dict[str, Any]]:
     """
     Generate both feature and target data in one call with robust error handling.
     
@@ -343,10 +438,19 @@ def make_data(
         resample_size: Number of alternative samples to generate when a simulation fails (default: 10)
         max_retries: Maximum number of resampling attempts per failed index (default: 3)
         require_all_successful: Whether to require all samples to succeed (default: False)
+        return_details: If True, returns extended data structure with intermediate datasets (default: False)
+        capture_all_species: If True, captures timecourses for all species in DataFrame format.
+                           If False, captures only outcome variable timecourse as list of arrays.
         **kwargs: Additional arguments for target data generation
         
     Returns:
-        Tuple of (feature_df, target_df) where target_df may contain NaN values for failed simulations
+        If return_details=False: Tuple of (feature_df, target_df) where target_df may contain NaN values for failed simulations
+        If return_details=True: Dictionary with keys:
+            - 'features': Feature dataframe (initial values)
+            - 'targets': Target dataframe (outcome values)
+            - 'parameters': Kinetic parameters dataframe (None if not provided)
+            - 'timecourse': Timecourse simulation data (DataFrame if capture_all_species=True, list of arrays if False, None if not captured)
+            - 'metadata': Dictionary with metadata about the generation process
         
     Examples:
         >>> X, y = make_data(
@@ -359,7 +463,7 @@ def make_data(
         ...     seed=42
         ... )
         
-        >>> X, y = make_data(
+        >>> result = make_data(
         ...     initial_values=inactive_state_variables,
         ...     perturbation_type='lognormal',
         ...     perturbation_params={'shape': 0.5},
@@ -373,9 +477,16 @@ def make_data(
         ...     seed=42,
         ...     outcome_var='Oa',
         ...     resample_size=10,
-        ...     max_retries=3
+        ...     max_retries=3,
+        ...     return_details=True,
+        ...     capture_all_species=True  # Capture timecourses for all species
         ... )
+        >>> feature_df = result['features']
+        >>> target_df = result['targets']
+        >>> param_df = result['parameters']
+        >>> timecourse_df = result['timecourse']  # DataFrame with all species timecourses
     """
+    # TODO: ensure that target and feature data generated do not have negative values 
     from .make_feature_data import make_feature_data
     from tqdm import tqdm
     from joblib import Parallel, delayed
@@ -402,6 +513,9 @@ def make_data(
             seed=param_seed if param_seed is not None else seed
         )
     
+    # Initialize timecourse data storage
+    timecourse_data = None
+    
     # Generate target data if model_spec and solver are provided
     if model_spec is not None and solver is not None:
         # Set default simulation parameters
@@ -419,8 +533,59 @@ def make_data(
         n_cores = kwargs.get('n_cores', 1)
         verbose = kwargs.get('verbose', False)
         
-        def simulate_perturbation(i: int) -> float:
-            """Simulate a single perturbation with optional kinetic parameters."""
+        # Determine species to capture if capture_all_species is True
+        species_to_capture = []
+        if capture_all_species:
+            # Instead of using deprecated model_spec attributes,
+            # we'll discover species from a test simulation
+            try:
+                # Use first row to test what species are available in simulation results
+                test_feature_values = feature_df.iloc[0].to_dict()
+                solver.set_state_values(test_feature_values)
+                
+                if parameter_df is not None:
+                    test_param_values = parameter_df.iloc[0].to_dict()
+                    solver.set_parameter_values(test_param_values)
+                
+                # Run test simulation
+                test_res = solver.simulate(start, end, points)
+                
+                # Capture all columns except 'time' and outcome_var
+                all_columns = list(test_res.columns)
+                species_to_capture = [col for col in all_columns if col != 'time']
+                
+                # Make sure outcome_var is included
+                if outcome_var not in species_to_capture:
+                    species_to_capture.append(outcome_var)
+                    
+            except Exception as e:
+                # If test simulation fails, we'll try to get species from actual simulations
+                warnings.warn(f"Could not discover species from test simulation: {e}")
+                species_to_capture = []
+        
+        def simulate_perturbation_single(i: int) -> Tuple[float, np.ndarray]:
+            """Simulate a single perturbation and capture only outcome_var."""
+            perturbed_values = feature_df.iloc[i].to_dict()
+            
+            # Set perturbed initial values into solver
+            solver.set_state_values(perturbed_values)
+            
+            # Set perturbed kinetic parameters if provided
+            if parameter_df is not None:
+                parameter_dict = parameter_df.iloc[i].to_dict()
+                solver.set_parameter_values(parameter_dict)
+            
+            # Run simulation
+            res = solver.simulate(start, end, points)
+            
+            # Extract target value and time course
+            target_value = res[outcome_var].iloc[-1]
+            time_course = res[outcome_var].values
+            
+            return target_value, time_course
+        
+        def simulate_perturbation_all_species(i: int) -> Tuple[float, Dict[str, np.ndarray]]:
+            """Simulate a single perturbation and capture timecourses for all species."""
             perturbed_values = feature_df.iloc[i].to_dict()
             
             # Set perturbed initial values into solver
@@ -435,10 +600,46 @@ def make_data(
             res = solver.simulate(start, end, points)
             
             # Extract target value
-            return res[outcome_var].iloc[-1]
+            target_value = res[outcome_var].iloc[-1]
+            
+            # Capture timecourses for all species
+            time_courses = {}
+            for species in species_to_capture:
+                if species in res.columns:
+                    time_courses[species] = res[species].values
+            
+            return target_value, time_courses
         
-        def simulate_with_values(feature_values: Dict[str, float], param_values: Optional[Dict[str, float]] = None) -> Optional[float]:
-            """Simulate with given values and return result or None on failure."""
+        def simulate_with_values_single(feature_values: Dict[str, float], param_values: Optional[Dict[str, float]] = None) -> Tuple[Optional[float], Optional[np.ndarray]]:
+            """Simulate with given values and return result and timecourse for outcome_var only."""
+            try:
+                # Set perturbed initial values into solver
+                solver.set_state_values(feature_values)
+                
+                # Set perturbed kinetic parameters if provided
+                if param_values is not None:
+                    solver.set_parameter_values(param_values)
+                
+                # Run simulation
+                res = solver.simulate(start, end, points)
+                
+                # Extract target value and time course
+                target_value = res[outcome_var].iloc[-1]
+                time_course = res[outcome_var].values
+                
+                return target_value, time_course
+            except RuntimeError as e:
+                # Check for CVODE errors
+                if "CV_TOO_MUCH_WORK" in str(e) or "CVODE" in str(e):
+                    return None, None
+                else:
+                    raise  # Re-raise unexpected errors
+            except Exception as e:
+                # Catch other solver errors
+                return None, None
+        
+        def simulate_with_values_all_species(feature_values: Dict[str, float], param_values: Optional[Dict[str, float]] = None) -> Tuple[Optional[float], Optional[Dict[str, np.ndarray]]]:
+            """Simulate with given values and return result and timecourses for all species."""
             try:
                 # Set perturbed initial values into solver
                 solver.set_state_values(feature_values)
@@ -451,20 +652,34 @@ def make_data(
                 res = solver.simulate(start, end, points)
                 
                 # Extract target value
-                return res[outcome_var].iloc[-1]
+                target_value = res[outcome_var].iloc[-1]
+                
+                # Capture timecourses for all species
+                time_courses = {}
+                for species in species_to_capture:
+                    if species in res.columns:
+                        time_courses[species] = res[species].values
+                
+                return target_value, time_courses
             except RuntimeError as e:
                 # Check for CVODE errors
                 if "CV_TOO_MUCH_WORK" in str(e) or "CVODE" in str(e):
-                    return None
+                    return None, None
                 else:
                     raise  # Re-raise unexpected errors
             except Exception as e:
                 # Catch other solver errors
-                return None
+                return None, None
         
         # Sequential processing with error handling and resampling
         all_targets = []
         failed_indices = []
+        
+        if return_details:
+            if capture_all_species:
+                timecourse_data = []  # Will be converted to DataFrame later
+            else:
+                timecourse_data = []  # List of arrays
         
         # Create progress bar
         pbar = tqdm(range(feature_df.shape[0]), desc='Simulating perturbations', disable=not verbose)
@@ -472,16 +687,45 @@ def make_data(
         for i in pbar:
             success = False
             target_value = None
+            time_course_data = None
             
             # Get original values
             original_feature_values = feature_df.iloc[i].to_dict()
             original_param_values = parameter_df.iloc[i].to_dict() if parameter_df is not None else None
             
             # Try original values first
-            target_value = simulate_with_values(original_feature_values, original_param_values)
+            if return_details:
+                if capture_all_species:
+                    target_value, time_course_data = simulate_with_values_all_species(original_feature_values, original_param_values)
+                else:
+                    target_value, time_course_data = simulate_with_values_single(original_feature_values, original_param_values)
+            else:
+                # Use the simpler simulation for backward compatibility
+                try:
+                    # Set perturbed initial values into solver
+                    solver.set_state_values(original_feature_values)
+                    
+                    # Set perturbed kinetic parameters if provided
+                    if original_param_values is not None:
+                        solver.set_parameter_values(original_param_values)
+                    
+                    # Run simulation
+                    res = solver.simulate(start, end, points)
+                    
+                    # Extract target value
+                    target_value = res[outcome_var].iloc[-1]
+                except RuntimeError as e:
+                    if "CV_TOO_MUCH_WORK" in str(e) or "CVODE" in str(e):
+                        target_value = None
+                    else:
+                        raise
+                except Exception:
+                    target_value = None
             
             if target_value is not None:
                 success = True
+                if return_details and time_course_data is not None:
+                    timecourse_data.append(time_course_data)
             else:
                 # Try resampling up to max_retries times
                 for attempt in range(max_retries):
@@ -506,13 +750,35 @@ def make_data(
                         alt_feature_values = feature_alternatives.iloc[j].to_dict()
                         alt_param_values = param_alternatives.iloc[j].to_dict() if param_alternatives is not None else None
                         
-                        target_value = simulate_with_values(alt_feature_values, alt_param_values)
+                        if return_details:
+                            if capture_all_species:
+                                target_value, time_course_data = simulate_with_values_all_species(alt_feature_values, alt_param_values)
+                            else:
+                                target_value, time_course_data = simulate_with_values_single(alt_feature_values, alt_param_values)
+                        else:
+                            try:
+                                solver.set_state_values(alt_feature_values)
+                                if alt_param_values is not None:
+                                    solver.set_parameter_values(alt_param_values)
+                                res = solver.simulate(start, end, points)
+                                target_value = res[outcome_var].iloc[-1]
+                            except RuntimeError as e:
+                                if "CV_TOO_MUCH_WORK" in str(e) or "CVODE" in str(e):
+                                    target_value = None
+                                else:
+                                    raise
+                            except Exception:
+                                target_value = None
+                        
                         if target_value is not None:
                             success = True
                             # Update the feature and parameter dataframes with successful alternative
                             feature_df.iloc[i] = pd.Series(alt_feature_values)
                             if parameter_df is not None and param_alternatives is not None:
                                 parameter_df.iloc[i] = pd.Series(alt_param_values)
+                            
+                            if return_details and time_course_data is not None:
+                                timecourse_data.append(time_course_data)
                             break
                     
                     if success:
@@ -523,6 +789,8 @@ def make_data(
             else:
                 all_targets.append(np.nan)
                 failed_indices.append(i)
+                if return_details:
+                    timecourse_data.append(None)  # Placeholder for failed simulation
                 pbar.set_description(f'Simulating perturbations (failed: {len(failed_indices)})')
         
         # Update progress bar final message
@@ -540,11 +808,184 @@ def make_data(
         
         # Create target DataFrame
         target_df = pd.DataFrame(all_targets, columns=[outcome_var])
+        
+        # Convert timecourse data to DataFrame if capture_all_species and return_details
+        if return_details and capture_all_species and timecourse_data is not None:
+            # Filter out None values (failed simulations)
+            valid_timecourse_data = [tc for tc in timecourse_data if tc is not None]
+            
+            # Always create a DataFrame, even if empty
+            if valid_timecourse_data:
+                timecourse_df = pd.DataFrame(valid_timecourse_data)
+                # Pad with None for failed simulations to maintain alignment
+                if len(valid_timecourse_data) < len(timecourse_data):
+                    # We need to align with original indices
+                    aligned_timecourse_data = []
+                    tc_idx = 0
+                    for tc in timecourse_data:
+                        if tc is None:
+                            aligned_timecourse_data.append(None)
+                        else:
+                            aligned_timecourse_data.append(valid_timecourse_data[tc_idx])
+                            tc_idx += 1
+                    timecourse_data = pd.DataFrame(aligned_timecourse_data)
+                else:
+                    timecourse_data = timecourse_df
+            else:
+                # All simulations failed, create DataFrame with NaN values for all samples
+                # First try to discover species columns from a test simulation
+                species_columns = []
+                try:
+                    # Try to discover species from a test simulation
+                    test_feature_values = feature_df.iloc[0].to_dict()
+                    solver.set_state_values(test_feature_values)
+                    
+                    if parameter_df is not None:
+                        test_param_values = parameter_df.iloc[0].to_dict()
+                        solver.set_parameter_values(test_param_values)
+                    
+                    test_res = solver.simulate(start, end, points)
+                    species_columns = [col for col in test_res.columns if col != 'time']
+                except Exception as e:
+                    # If test simulation also fails, try alternative methods to get species
+                    warnings.warn(f"Could not discover species for empty DataFrame from simulation: {e}")
+                    
+                    # Alternative 1: Try to get species from feature_df columns
+                    if len(feature_df.columns) > 0:
+                        species_columns = list(feature_df.columns)
+                    # Alternative 2: If still empty, create generic column names
+                    elif not species_columns:
+                        species_columns = ['species_{}'.format(i) for i in range(len(initial_values))]
+                
+                # Create DataFrame with n_samples rows (all NaN)
+                nan_data = {col: [np.nan] * n_samples for col in species_columns}
+                timecourse_data = pd.DataFrame(nan_data)
     else:
         # Return empty target DataFrame if no model/solver provided
         target_df = pd.DataFrame()
+        timecourse_data = None if return_details else None
     
-    return feature_df, target_df
+    # Return extended data structure if requested
+    if return_details:
+        metadata = {
+            'failed_indices': failed_indices if 'failed_indices' in locals() else [],
+            'success_rate': 1.0 if len(all_targets) == 0 else (1 - len(failed_indices) / len(all_targets)) if 'failed_indices' in locals() else 1.0,
+            'n_samples': n_samples,
+            'perturbation_type': perturbation_type,
+            'capture_all_species': capture_all_species,
+            'resampling_used': any(failed_indices) if 'failed_indices' in locals() else False
+        }
+        
+        return {
+            'features': feature_df,
+            'targets': target_df,
+            'parameters': parameter_df,
+            'timecourse': timecourse_data,
+            'metadata': metadata
+        }
+    else:
+        return feature_df, target_df
+
+
+def make_data_extended(
+    initial_values: Dict[str, float],
+    perturbation_type: str,
+    perturbation_params: Dict[str, Any],
+    n_samples: int,
+    model_spec=None,
+    solver=None,
+    parameter_values: Optional[Dict[str, float]] = None,
+    param_perturbation_type: str = 'none',
+    param_perturbation_params: Optional[Dict[str, Any]] = None,
+    simulation_params: Optional[Dict[str, Any]] = None,
+    seed: Optional[int] = None,
+    param_seed: Optional[int] = None,
+    resample_size: int = 10,
+    max_retries: int = 3,
+    require_all_successful: bool = False,
+    capture_all_species: bool = True,
+    **kwargs
+) -> Dict[str, Any]:
+    """
+    Generate feature, target, and intermediate datasets with comprehensive return.
+    
+    This function is a convenience wrapper around make_data() with return_details=True.
+    By default, captures timecourses for all species in DataFrame format.
+    
+    Args:
+        initial_values: Dictionary of initial values
+        perturbation_type: Type of perturbation ('uniform', 'gaussian', 'lognormal', 'lhs')
+        perturbation_params: Parameters for perturbation
+        n_samples: Number of samples
+        model_spec: Model specification (required for target generation)
+        solver: Solver object (required for target generation)
+        parameter_values: Dictionary of kinetic parameter values (optional)
+        param_perturbation_type: Type of perturbation for kinetic parameters ('none', 'uniform', 'gaussian', 'lognormal', 'lhs')
+        param_perturbation_params: Parameters for kinetic parameter perturbation (optional)
+        simulation_params: Simulation parameters (optional)
+        seed: Random seed for feature generation
+        param_seed: Random seed for parameter generation (optional, uses seed if not provided)
+        resample_size: Number of alternative samples to generate when a simulation fails (default: 10)
+        max_retries: Maximum number of resampling attempts per failed index (default: 3)
+        require_all_successful: Whether to require all samples to succeed (default: False)
+        capture_all_species: If True (default), captures timecourses for all species in DataFrame format.
+                           If False, captures only outcome variable timecourse as list of arrays.
+        **kwargs: Additional arguments for target data generation
+        
+    Returns:
+        Dictionary with keys:
+            - 'features': Feature dataframe (initial values)
+            - 'targets': Target dataframe (outcome values)
+            - 'parameters': Kinetic parameters dataframe (None if not provided)
+            - 'timecourse': Timecourse simulation data (DataFrame if capture_all_species=True, list of arrays if False)
+            - 'metadata': Dictionary with metadata about the generation process
+        
+    Examples:
+        >>> result = make_data_extended(
+        ...     initial_values={'A': 10.0, 'B': 20.0},
+        ...     perturbation_type='gaussian',
+        ...     perturbation_params={'std': 2.0},
+        ...     n_samples=100,
+        ...     model_spec=model_spec,
+        ...     solver=solver,
+        ...     seed=42
+        ... )
+        >>> feature_df = result['features']
+        >>> target_df = result['targets']
+        >>> timecourse_df = result['timecourse']  # DataFrame with all species timecourses
+        
+        >>> result = make_data_extended(
+        ...     initial_values={'A': 10.0, 'B': 20.0},
+        ...     perturbation_type='gaussian',
+        ...     perturbation_params={'std': 2.0},
+        ...     n_samples=100,
+        ...     model_spec=model_spec,
+        ...     solver=solver,
+        ...     seed=42,
+        ...     capture_all_species=False  # Capture only outcome variable timecourse
+        ... )
+        >>> timecourse_list = result['timecourse']  # List of arrays for outcome variable only
+    """
+    return make_data(
+        initial_values=initial_values,
+        perturbation_type=perturbation_type,
+        perturbation_params=perturbation_params,
+        n_samples=n_samples,
+        model_spec=model_spec,
+        solver=solver,
+        parameter_values=parameter_values,
+        param_perturbation_type=param_perturbation_type,
+        param_perturbation_params=param_perturbation_params,
+        simulation_params=simulation_params,
+        seed=seed,
+        param_seed=param_seed,
+        resample_size=resample_size,
+        max_retries=max_retries,
+        require_all_successful=require_all_successful,
+        return_details=True,
+        capture_all_species=capture_all_species,
+        **kwargs
+    )
 
 
 def add_deprecation_warning(

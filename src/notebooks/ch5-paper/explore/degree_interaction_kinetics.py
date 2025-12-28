@@ -341,7 +341,7 @@ if 'result' in locals():
 # ## 7. Make data
 
 # %%
-from models.utils.data_generation_helpers import make_data 
+from models.utils.data_generation_helpers import make_data, make_data_extended
 
 state_variables = model.get_state_variables()
 
@@ -357,26 +357,58 @@ if 'O' in inactive_state_variables:
 kinetic_parameters = model.get_parameters()
 
 
-X, y = make_data(
+results = make_data_extended(
     initial_values=inactive_state_variables,
     perturbation_type="lognormal",
     perturbation_params={"shape": 0.5},
     parameter_values=kinetic_parameters,
     param_perturbation_type="lognormal",
     param_perturbation_params={"shape": 0.5},
-    n_samples=20000,
+    n_samples=2000,
     model_spec=degree_spec,
     solver=solver,
     simulation_params={"start": 0, "end": 10000, "points": 101},
     seed=42,
     outcome_var="Oa",
+    capture_all_species=True,
 )
 
 # %%
-X
+results.keys()
+
 
 # %%
-y
+X, y, parameters, timecourses, metadata = (
+    results['features'],
+    results['targets'],
+    results['parameters'],
+    results['timecourse'],
+    results['metadata'],
+)
+
+
+# %%
+timecourses.head()
+
+# %%
+# using timecourses, plot the timecourse of Oa for the first 5 samples
+# the table structure is column: specie name, each cell contains a numpy array of timecourse values
+plt.figure(figsize=(12, 4))
+
+# Plot timecourse of Oa for first 5 samples
+for i in range(500):
+    plt.plot(timecourses.iloc[i]['Oa'], label=f'Sample {i+1}', alpha=0.7)
+
+plt.xlabel('Time Points')
+plt.ylabel('Oa Concentration')
+plt.title('Timecourse of Oa for First n Samples')
+# plt.legend()
+plt.grid(True, alpha=0.3)
+plt.tight_layout()
+plt.show()
+
+# %%
+parameters
 
 # %%
 # plot the distribution of y values, the value range between 0 to 3 needs to be plotted as another independent histogram

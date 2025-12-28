@@ -43,6 +43,7 @@ notebook_name = 'robustness-expression-noise'
 exp_number = '02'
 section_number = '4'
 version_number = 'v1'
+notebook_path = f'{SAVE_RESULT_PATH}/{exp_number}_{version_number}_{notebook_name}'
 notebook_config = {
     'notebook_name': notebook_name,
     'exp_number': exp_number,

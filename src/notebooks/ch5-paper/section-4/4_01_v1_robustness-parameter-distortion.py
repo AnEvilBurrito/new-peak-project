@@ -191,6 +191,74 @@ if not distortion_results.empty:
     s3_manager.save_figure(notebook_config, plt.gcf(), "performance_distribution_distortion")
     plt.show()
 
+# %%
+if not distortion_results.empty:
+    # Get unique models
+    models = distortion_results["Model"].unique()
+    feature_data_types = distortion_results["Feature Data"].unique()
+    
+    n_models = len(models)
+
+    # Calculate grid dimensions
+    n_cols = min(3, n_models)  # Max 3 columns
+    n_rows = (n_models + n_cols - 1) // n_cols  # Ceiling division
+
+    # Create figure
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=(5 * n_cols, 4 * n_rows))
+    fig.suptitle(
+        "Model-Specific Performance Under Parameter Distortion", fontsize=16, y=1.02
+    )
+
+    # Flatten axes array for easy iteration
+    if n_rows * n_cols > 1:
+        axes = axes.flatten()
+    else:
+        axes = [axes]
+
+    # Create plot for each model
+    for i, model in enumerate(models):
+        ax = axes[i]
+        model_data = distortion_results[distortion_results["Model"] == model]
+
+        sns.lineplot(
+            data=model_data,
+            x="Distortion Factor",
+            y="Pearson Correlation",
+            hue="Feature Data",
+            palette="Set1",
+            marker="o",
+            ax=ax,
+        )
+
+        ax.set_title(f"{model} Performance")
+        ax.set_xlabel("Distortion Factor")
+        ax.set_ylabel("Pearson Correlation")
+        
+        # ensure identical x and y limits across all subplots, x is between 0 and 3 
+        # y is between 0 and 1
+        ax.set_xlim(1, 3.1)
+        ax.set_ylim(0, 1)
+        
+        # no legend to avoid clutter, unless it is the last plot 
+        ax.legend().remove()
+        
+        # if i == n_models - 1:
+        #     ax.legend(title="Feature Data", bbox_to_anchor=(1.05, 1), loc="upper left")
+        # else:
+        #     ax.legend().remove()
+        
+
+    # Hide any unused subplots
+    for i in range(len(models), len(axes)):
+        axes[i].set_visible(False)
+
+    plt.tight_layout()
+
+    # Save to S3
+    # s3_manager.save_figure(notebook_config, fig, "model_specific_distortion_analysis")
+    plt.show()
+
+
 # %% [markdown]
 # ## Statistical Analysis
 

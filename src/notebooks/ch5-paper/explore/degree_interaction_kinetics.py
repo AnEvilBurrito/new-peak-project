@@ -222,7 +222,7 @@ drug_map = regulator_parameter_map.get("D", {})
 drug_param = drug_map[0]
 print(f"Drug D regulates parameters: {drug_map[0]}")
 
-model.set_parameter(drug_param, 0.01)  # Set to 0 to simulate drug effect
+model.set_parameter(drug_param, 10)  # Set to 0 to simulate drug effect
 
 
 # %% [markdown]
@@ -389,6 +389,18 @@ X, y, parameters, timecourses, metadata = (
 
 # %%
 timecourses.head()
+
+# %%
+from models.utils.dynamic_calculations import (
+    dynamic_features_method,
+    last_time_point_method,
+)
+
+dyn_features = dynamic_features_method(timecourses)
+last_tp_features = last_time_point_method(timecourses)
+
+# %%
+dyn_features.head()
 
 # %%
 # using timecourses, plot the timecourse of Oa for the first 5 samples

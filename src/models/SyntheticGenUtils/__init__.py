@@ -23,9 +23,16 @@ from .ParallelUtils import (
 )
 
 from .PerturbationUtils import (
-    generate_uniform_perturbation,
-    generate_gaussian_perturbation,
+    apply_uniform_perturbation,
+    apply_gaussian_perturbation,
+    apply_lognormal_perturbation,
     generate_lhs_perturbation,
+    generate_perturbation_samples,
+    convert_perturbations_to_dataframe,
+    generate_gaussian_perturbation_dataframe,
+    generate_lognormal_perturbation_dataframe,
+    generate_uniform_perturbation_dataframe,
+    generate_lhs_perturbation_dataframe,
     get_all_species
 )
 
@@ -54,9 +61,16 @@ __all__ = [
     'handle_simulation_error',
     
     # Perturbation generation
-    'generate_uniform_perturbation',
-    'generate_gaussian_perturbation', 
+    'apply_uniform_perturbation',
+    'apply_gaussian_perturbation',
+    'apply_lognormal_perturbation',
     'generate_lhs_perturbation',
+    'generate_perturbation_samples',
+    'convert_perturbations_to_dataframe',
+    'generate_gaussian_perturbation_dataframe',
+    'generate_lognormal_perturbation_dataframe',
+    'generate_uniform_perturbation_dataframe',
+    'generate_lhs_perturbation_dataframe',
     'get_all_species',
     
     # Simulation

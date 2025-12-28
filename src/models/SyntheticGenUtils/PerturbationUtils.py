@@ -11,7 +11,7 @@ from scipy.stats import qmc
 from typing import Dict, Any, List
 
 
-def generate_uniform_perturbation(initial_values: Dict[str, float],
+def apply_uniform_perturbation(initial_values: Dict[str, float],
                                 min_: float, max_: float,
                                 rng: np.random.Generator = None) -> Dict[str, float]:
     """
@@ -37,7 +37,7 @@ def generate_uniform_perturbation(initial_values: Dict[str, float],
     return perturbed_values
 
 
-def generate_gaussian_perturbation(initial_values: Dict[str, float],
+def apply_gaussian_perturbation(initial_values: Dict[str, float],
                                  perturbation_params: Dict[str, float],
                                  rng: np.random.Generator = None) -> Dict[str, float]:
     """
@@ -70,6 +70,69 @@ def generate_gaussian_perturbation(initial_values: Dict[str, float],
             sigma = 0.1 * initial_value
         
         perturbed_values[species] = rng.normal(mu, sigma)
+    
+    return perturbed_values
+
+
+def apply_lognormal_perturbation(initial_values: Dict[str, float],
+                                 perturbation_params: Dict[str, float],
+                                 rng: np.random.Generator = None) -> Dict[str, float]:
+    """
+    Generate lognormal perturbation for all species.
+    
+    Args:
+        initial_values: Dictionary of initial species values (must be > 0)
+        perturbation_params: Parameters with 'shape' or 'rsd_shape' key
+            - 'shape': shape parameter (sigma) of the underlying normal distribution
+            - 'rsd_shape': relative shape parameter (shape / log(initial_value))
+        rng: Random number generator (optional)
+        
+    Returns:
+        Dictionary of perturbed values
+        
+    Raises:
+        ValueError: If initial values are not positive or parameters are invalid
+    """
+    perturbed_values = {}
+    
+    if rng is None:
+        rng = np.random.default_rng()
+    
+    # Validate initial values are positive for lognormal
+    for species, initial_value in initial_values.items():
+        if initial_value <= 0:
+            raise ValueError(f'Initial value for {species} must be positive for lognormal distribution')
+    
+    # Validate perturbation parameters
+    if 'shape' not in perturbation_params and 'rsd_shape' not in perturbation_params:
+        raise ValueError('For lognormal perturbation, parameters must contain "shape" or "rsd_shape"')
+    
+    if 'shape' in perturbation_params and perturbation_params['shape'] <= 0:
+        raise ValueError('Shape parameter must be positive')
+    if 'rsd_shape' in perturbation_params and perturbation_params['rsd_shape'] <= 0:
+        raise ValueError('Relative shape parameter must be positive')
+    
+    for species, initial_value in initial_values.items():
+        # For lognormal, median = exp(mean of underlying normal)
+        # We want median = initial_value, so mean = log(initial_value)
+        mean = np.log(initial_value)
+        
+        # Calculate shape parameter (sigma of underlying normal)
+        if 'shape' in perturbation_params:
+            sigma = perturbation_params['shape']
+        elif 'rsd_shape' in perturbation_params:
+            # Relative shape: sigma = rsd_shape * log(initial_value)
+            # But we need to handle case where initial_value = 1 -> log(1) = 0
+            if initial_value == 1:
+                raise ValueError(f'Cannot use rsd_shape with initial_value = 1 for {species}')
+            sigma = perturbation_params['rsd_shape'] * np.log(initial_value)
+        else:
+            # Default shape if no parameters provided
+            sigma = 0.1
+        
+        # Generate lognormal sample: lognormal(mean, sigma)
+        # numpy's lognormal uses mean and sigma of underlying normal distribution
+        perturbed_values[species] = rng.lognormal(mean, sigma)
     
     return perturbed_values
 
@@ -168,7 +231,7 @@ def generate_perturbation_samples(perturbation_type: str,
     Generate multiple perturbation samples.
     
     Args:
-        perturbation_type: Type of perturbation ('uniform', 'gaussian', 'lhs')
+        perturbation_type: Type of perturbation ('uniform', 'gaussian', 'lhs', 'lognormal')
         initial_values: Dictionary of initial values
         perturbation_params: Parameters for perturbation
         n_samples: Number of samples to generate
@@ -195,14 +258,17 @@ def generate_perturbation_samples(perturbation_type: str,
             all_perturbed_values.append(perturbed_values)
     
     else:
-        # Uniform and Gaussian generate samples individually
+        # Uniform, Gaussian, and Lognormal generate samples individually
         for _ in range(n_samples):
             if perturbation_type == 'uniform':
-                perturbed_values = generate_uniform_perturbation(
+                perturbed_values = apply_uniform_perturbation(
                     initial_values, perturbation_params['min'], 
                     perturbation_params['max'], rng)
             elif perturbation_type == 'gaussian':
-                perturbed_values = generate_gaussian_perturbation(
+                perturbed_values = apply_gaussian_perturbation(
+                    initial_values, perturbation_params, rng)
+            elif perturbation_type == 'lognormal':
+                perturbed_values = apply_lognormal_perturbation(
                     initial_values, perturbation_params, rng)
             else:
                 raise ValueError(f'Unsupported perturbation type: {perturbation_type}')
@@ -237,3 +303,185 @@ def convert_perturbations_to_dataframe(perturbations: List[Dict[str, float]],
                 perturbations[i][col] = np.nan
     
     return pd.DataFrame(perturbations, columns=columns)
+
+
+def generate_gaussian_perturbation_dataframe(
+    initial_values: Dict[str, float],
+    perturbation_params: Dict[str, float],
+    n_samples: int,
+    seed: int = None
+) -> pd.DataFrame:
+    """
+    Generate DataFrame of Gaussian perturbed samples.
+    
+    Args:
+        initial_values: Dictionary of initial values (keys = parameter names, values = starting points)
+        perturbation_params: Parameters for Gaussian perturbation
+            - 'std': absolute standard deviation
+            - 'rsd': relative standard deviation (std/mean)
+        n_samples: Number of samples to generate
+        seed: Random seed for reproducibility
+        
+    Returns:
+        DataFrame with columns as keys from initial_values and rows as samples
+        
+    Raises:
+        ValueError: If perturbation parameters are invalid
+    """
+    # Validate perturbation parameters
+    if 'std' not in perturbation_params and 'rsd' not in perturbation_params:
+        raise ValueError('For Gaussian perturbation, parameters must contain "std" or "rsd"')
+    
+    if 'std' in perturbation_params and perturbation_params['std'] < 0:
+        raise ValueError('Standard deviation must be non-negative')
+    if 'rsd' in perturbation_params and perturbation_params['rsd'] < 0:
+        raise ValueError('Relative standard deviation must be non-negative')
+    
+    # Generate perturbation samples
+    perturbations = generate_perturbation_samples(
+        perturbation_type='gaussian',
+        initial_values=initial_values,
+        perturbation_params=perturbation_params,
+        n_samples=n_samples,
+        seed=seed
+    )
+    
+    # Convert to DataFrame
+    return convert_perturbations_to_dataframe(perturbations)
+
+
+def generate_lognormal_perturbation_dataframe(
+    initial_values: Dict[str, float],
+    perturbation_params: Dict[str, float],
+    n_samples: int,
+    seed: int = None
+) -> pd.DataFrame:
+    """
+    Generate DataFrame of lognormal perturbed samples.
+    
+    Args:
+        initial_values: Dictionary of initial values (keys = parameter names, values = starting points)
+            Must be positive for lognormal distribution
+        perturbation_params: Parameters for lognormal perturbation
+            - 'shape': shape parameter (sigma) of the underlying normal distribution
+            - 'rsd_shape': relative shape parameter (shape / log(initial_value))
+        n_samples: Number of samples to generate
+        seed: Random seed for reproducibility
+        
+    Returns:
+        DataFrame with columns as keys from initial_values and rows as samples
+        
+    Raises:
+        ValueError: If initial values are not positive or parameters are invalid
+    """
+    # Validate initial values are positive for lognormal
+    for species, value in initial_values.items():
+        if value <= 0:
+            raise ValueError(f'Initial value for {species} must be positive for lognormal distribution')
+    
+    # Validate perturbation parameters
+    if 'shape' not in perturbation_params and 'rsd_shape' not in perturbation_params:
+        raise ValueError('For lognormal perturbation, parameters must contain "shape" or "rsd_shape"')
+    
+    if 'shape' in perturbation_params and perturbation_params['shape'] <= 0:
+        raise ValueError('Shape parameter must be positive')
+    if 'rsd_shape' in perturbation_params and perturbation_params['rsd_shape'] <= 0:
+        raise ValueError('Relative shape parameter must be positive')
+    
+    # Generate perturbation samples
+    perturbations = generate_perturbation_samples(
+        perturbation_type='lognormal',
+        initial_values=initial_values,
+        perturbation_params=perturbation_params,
+        n_samples=n_samples,
+        seed=seed
+    )
+    
+    # Convert to DataFrame
+    return convert_perturbations_to_dataframe(perturbations)
+
+
+def generate_uniform_perturbation_dataframe(
+    initial_values: Dict[str, float],
+    perturbation_params: Dict[str, float],
+    n_samples: int,
+    seed: int = None
+) -> pd.DataFrame:
+    """
+    Generate DataFrame of uniform perturbed samples.
+    
+    Args:
+        initial_values: Dictionary of initial values (keys = parameter names, values = starting points)
+        perturbation_params: Parameters for uniform perturbation
+            - 'min': minimum multiplier
+            - 'max': maximum multiplier
+        n_samples: Number of samples to generate
+        seed: Random seed for reproducibility
+        
+    Returns:
+        DataFrame with columns as keys from initial_values and rows as samples
+        
+    Raises:
+        ValueError: If perturbation parameters are invalid
+    """
+    # Validate perturbation parameters
+    if 'min' not in perturbation_params or 'max' not in perturbation_params:
+        raise ValueError('For uniform perturbation, parameters must contain "min" and "max"')
+    
+    if perturbation_params['min'] > perturbation_params['max']:
+        raise ValueError('Minimum must be less than or equal to maximum')
+    
+    # Generate perturbation samples
+    perturbations = generate_perturbation_samples(
+        perturbation_type='uniform',
+        initial_values=initial_values,
+        perturbation_params=perturbation_params,
+        n_samples=n_samples,
+        seed=seed
+    )
+    
+    # Convert to DataFrame
+    return convert_perturbations_to_dataframe(perturbations)
+
+
+def generate_lhs_perturbation_dataframe(
+    initial_values: Dict[str, float],
+    perturbation_params: Dict[str, float],
+    n_samples: int,
+    seed: int = None
+) -> pd.DataFrame:
+    """
+    Generate DataFrame of Latin Hypercube Sampling perturbed samples.
+    
+    Args:
+        initial_values: Dictionary of initial values (keys = parameter names, values = starting points)
+        perturbation_params: Parameters for LHS perturbation
+            - 'min': minimum value for scaling
+            - 'max': maximum value for scaling
+        n_samples: Number of samples to generate
+        seed: Random seed for reproducibility
+        
+    Returns:
+        DataFrame with columns as keys from initial_values and rows as samples
+        
+    Raises:
+        ValueError: If perturbation parameters are invalid
+    """
+    # Validate perturbation parameters
+    if 'min' not in perturbation_params or 'max' not in perturbation_params:
+        raise ValueError('For LHS perturbation, parameters must contain "min" and "max"')
+    
+    if perturbation_params['min'] > perturbation_params['max']:
+        raise ValueError('Minimum must be less than or equal to maximum')
+    
+    # Generate perturbation samples
+    perturbations = generate_perturbation_samples(
+        perturbation_type='lhs',
+        initial_values=initial_values,
+        perturbation_params=perturbation_params,
+        n_samples=n_samples,
+        seed=seed
+    )
+    
+    # Convert to DataFrame
+    return convert_perturbations_to_dataframe(perturbations)

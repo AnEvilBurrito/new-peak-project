@@ -72,11 +72,11 @@ print("Imports complete")
 
 # %%
 # Initialize degree interaction specification
-degree_spec = DegreeInteractionSpec(degree_cascades=[1,2,4,10,20,40])
+degree_spec = DegreeInteractionSpec(degree_cascades=[1,2])
 
 # Generate complete specifications with moderate feedback density
 degree_spec.generate_specifications(
-    random_seed=1,
+    random_seed=42,
     feedback_density=1  # 30% of cascades get upward feedback (mandatory downward always present)
 )
 
@@ -292,47 +292,98 @@ if 'result' in locals():
     plt.legend(loc='upper right', fontsize=8)
     plt.grid(True, alpha=0.3)
     
-    # Subplot 2: Degree 2 (feedback to degree 1)
-    plt.subplot(2, 2, 2)
-    plt.plot(result['time'], result['R2_1'], label='R2_1 (inactive)', color='blue', alpha=0.7)
-    plt.plot(result['time'], result['R2_1a'], label='R2_1a (active)', color='cyan', alpha=0.7)
-    plt.plot(result['time'], result['I2_1'], label='I2_1 (inactive)', color='green', alpha=0.7)
-    plt.plot(result['time'], result['I2_1a'], label='I2_1a (active)', color='lime', alpha=0.7)
-    plt.axvline(x=5000, color='gray', linestyle='--', alpha=0.7, label='Drug D applied')
-    plt.xlabel('Time')
-    plt.ylabel('Concentration')
-    plt.title('Degree 2: Feedback Cascade 1')
-    plt.legend(loc='upper right', fontsize=8)
-    plt.grid(True, alpha=0.3)
+    # # Subplot 2: Degree 2 (feedback to degree 1)
+    # plt.subplot(2, 2, 2)
+    # plt.plot(result['time'], result['R2_1'], label='R2_1 (inactive)', color='blue', alpha=0.7)
+    # plt.plot(result['time'], result['R2_1a'], label='R2_1a (active)', color='cyan', alpha=0.7)
+    # plt.plot(result['time'], result['I2_1'], label='I2_1 (inactive)', color='green', alpha=0.7)
+    # plt.plot(result['time'], result['I2_1a'], label='I2_1a (active)', color='lime', alpha=0.7)
+    # plt.axvline(x=5000, color='gray', linestyle='--', alpha=0.7, label='Drug D applied')
+    # plt.xlabel('Time')
+    # plt.ylabel('Concentration')
+    # plt.title('Degree 2: Feedback Cascade 1')
+    # plt.legend(loc='upper right', fontsize=8)
+    # plt.grid(True, alpha=0.3)
     
-    # Subplot 3: Degree 3 (feedback to degree 2)
-    plt.subplot(2, 2, 3)
-    plt.plot(result['time'], result['R3_1'], label='R3_1 (inactive)', color='blue', alpha=0.7)
-    plt.plot(result['time'], result['R3_1a'], label='R3_1a (active)', color='cyan', alpha=0.7)
-    plt.plot(result['time'], result['I3_1'], label='I3_1 (inactive)', color='green', alpha=0.7)
-    plt.plot(result['time'], result['I3_1a'], label='I3_1a (active)', color='lime', alpha=0.7)
-    plt.axvline(x=500, color='gray', linestyle='--', alpha=0.7, label='Drug D applied')
-    plt.xlabel('Time')
-    plt.ylabel('Concentration')
-    plt.title('Degree 3: Feedback Cascade 1')
-    plt.legend(loc='upper right', fontsize=8)
-    plt.grid(True, alpha=0.3)
+    # # Subplot 3: Degree 3 (feedback to degree 2)
+    # plt.subplot(2, 2, 3)
+    # plt.plot(result['time'], result['R3_1'], label='R3_1 (inactive)', color='blue', alpha=0.7)
+    # plt.plot(result['time'], result['R3_1a'], label='R3_1a (active)', color='cyan', alpha=0.7)
+    # plt.plot(result['time'], result['I3_1'], label='I3_1 (inactive)', color='green', alpha=0.7)
+    # plt.plot(result['time'], result['I3_1a'], label='I3_1a (active)', color='lime', alpha=0.7)
+    # plt.axvline(x=500, color='gray', linestyle='--', alpha=0.7, label='Drug D applied')
+    # plt.xlabel('Time')
+    # plt.ylabel('Concentration')
+    # plt.title('Degree 3: Feedback Cascade 1')
+    # plt.legend(loc='upper right', fontsize=8)
+    # plt.grid(True, alpha=0.3)
     
-    # Subplot 4: Drug effect summary
-    plt.subplot(2, 2, 4)
-    active_species = ['R1_1a', 'I1_1a', 'Oa', 'R2_1a', 'I2_1a', 'R3_1a', 'I3_1a']
-    colors = plt.cm.Set3(np.linspace(0, 1, len(active_species)))
+    # # Subplot 4: Drug effect summary
+    # plt.subplot(2, 2, 4)
+    # active_species = ['R1_1a', 'I1_1a', 'Oa', 'R2_1a', 'I2_1a', 'R3_1a', 'I3_1a']
+    # colors = plt.cm.Set3(np.linspace(0, 1, len(active_species)))
     
-    for i, species in enumerate(active_species):
-        if species in result.columns:
-            plt.plot(result['time'], result[species], label=species, color=colors[i], alpha=0.8)
+    # for i, species in enumerate(active_species):
+    #     if species in result.columns:
+    #         plt.plot(result['time'], result[species], label=species, color=colors[i], alpha=0.8)
     
-    plt.axvline(x=500, color='gray', linestyle='--', alpha=0.7, label='Drug D applied')
-    plt.xlabel('Time')
-    plt.ylabel('Active Concentration')
-    plt.title('Active Species Across All Degrees')
-    plt.legend(loc='upper right', fontsize=7)
-    plt.grid(True, alpha=0.3)
+    # plt.axvline(x=500, color='gray', linestyle='--', alpha=0.7, label='Drug D applied')
+    # plt.xlabel('Time')
+    # plt.ylabel('Active Concentration')
+    # plt.title('Active Species Across All Degrees')
+    # plt.legend(loc='upper right', fontsize=7)
+    # plt.grid(True, alpha=0.3)
     
     plt.tight_layout()
     plt.show()
+
+# %% [markdown]
+# ## 7. Make data
+
+# %%
+from models.utils.data_generation_helpers import make_data 
+
+state_variables = model.get_state_variables()
+
+# get state variables that end with 'a' (active forms)
+active_state_variables = {k: v for k, v in state_variables.items() if k.endswith('a')}
+
+# filter out all active state variables
+inactive_state_variables = {k: v for k, v in state_variables.items() if not k.endswith('a')}
+# further filter out 'O' if present
+if 'O' in inactive_state_variables:
+    del inactive_state_variables['O']
+
+kinetic_parameters = model.get_parameters()
+
+
+X, y = make_data(
+    initial_values=inactive_state_variables,
+    perturbation_type="lognormal",
+    perturbation_params={"shape": 0.5},
+    parameter_values=kinetic_parameters,
+    param_perturbation_type="lognormal",
+    param_perturbation_params={"shape": 0.5},
+    n_samples=20000,
+    model_spec=degree_spec,
+    solver=solver,
+    simulation_params={"start": 0, "end": 10000, "points": 101},
+    seed=42,
+    outcome_var="Oa",
+)
+
+# %%
+X
+
+# %%
+y
+
+# %%
+# plot the distribution of y values, the value range between 0 to 3 needs to be plotted as another independent histogram
+plt.figure(figsize=(6,4))
+plt.hist(y, bins=30, color='skyblue', edgecolor='black', alpha=0.7)
+plt.title('Distribution of Outcome Variable Oa')
+plt.xlabel('Concentration of Oa')
+plt.ylabel('Frequency')
+plt.show()
+

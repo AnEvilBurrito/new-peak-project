@@ -12,6 +12,7 @@ from dataclasses import dataclass
 
 from scipy.stats import qmc
 
+import warnings
 import numpy as np
 import pandas as pd
 from tqdm import tqdm
@@ -32,6 +33,11 @@ def lhs(n_samples, n_features, random_state=None):
 
 
 def generate_feature_data_v3(model_spec: ModelSpecification, initial_values: dict, perturbation_type: str, perturbation_params, n, seed=None):
+    warnings.warn(
+        "generate_feature_data_v3 is deprecated. Use make_feature_data from models.utils.make_feature_data instead.",
+        DeprecationWarning,
+        stacklevel=2
+    )
     '''
     Generate a dataframe of perturbed values for the model, version 2, supports lhs sampling
         model_spec: ModelSpecification object
@@ -96,6 +102,11 @@ def generate_feature_data_v3(model_spec: ModelSpecification, initial_values: dic
 
 
 def generate_feature_data_v2(model_spec: ModelSpecification, initial_values: dict, perturbation_type: str, perturbation_params, n, seed=None):
+    warnings.warn(
+        "generate_feature_data_v2 is deprecated. Use make_feature_data from models.utils.make_feature_data instead.",
+        DeprecationWarning,
+        stacklevel=2
+    )
     '''
     Generate a dataframe of perturbed values for the model, version 2, supports lhs sampling
         model_spec: ModelSpecification object
@@ -159,6 +170,11 @@ def generate_feature_data_v2(model_spec: ModelSpecification, initial_values: dic
 
 ### Generate feature and target data
 def generate_feature_data(model_spec: ModelSpecification, initial_values: dict, perturbation_type: str, perturbation_params, n, seed=None):
+    warnings.warn(
+        "generate_feature_data is deprecated. Use make_feature_data from models.utils.make_feature_data instead.",
+        DeprecationWarning,
+        stacklevel=2
+    )
     '''
     Generate a dataframe of perturbed values for the model
         model_spec: ModelSpecification object   
@@ -396,6 +412,11 @@ def generate_target_data(model_spec: ModelSpecification, solver: Solver, feature
                          n_cores=1,
                          outcome_var='Cp', 
                          verbose=False):
+    warnings.warn(
+        "generate_target_data is deprecated. Use make_target_data from models.utils.make_target_data instead.",
+        DeprecationWarning,
+        stacklevel=2
+    )
     '''
     Generate the target data for the model
         model_spec: ModelSpecification object   
@@ -477,6 +498,11 @@ def generate_target_data(model_spec: ModelSpecification, solver: Solver, feature
 
 
 def generate_model_timecourse_data_diff_spec(model_builds: list[ModelBuilder], SolverClass: type[Solver], feature_df: pd.DataFrame, simulation_params={'start': 0, 'end': 500, 'points': 100}, capture_species='all', n_cores=1, verbose=False):
+    warnings.warn(
+        "generate_model_timecourse_data_diff_spec is deprecated. Use make_timecourse_data_diff_spec from models.utils.make_timecourse_data instead.",
+        DeprecationWarning,
+        stacklevel=2
+    )
     '''
     Generate the time course data for the model, using different model specifications
         model_builds: list of ModelBuilder objects, each object contains a different model specification
@@ -554,6 +580,11 @@ def generate_model_timecourse_data_diff_spec(model_builds: list[ModelBuilder], S
 
 
 def generate_model_timecourse_data_diff_build(model_spec: ModelSpecification, solver: Solver, feature_df: pd.DataFrame, parameter_set: list[dict], simulation_params={'start': 0, 'end': 500, 'points': 100}, capture_species='all', n_cores=1, verbose=False):
+    warnings.warn(
+        "generate_model_timecourse_data_diff_build is deprecated. Use make_timecourse_data_diff_build from models.utils.make_timecourse_data instead.",
+        DeprecationWarning,
+        stacklevel=2
+    )
     '''
     Generate the time course data for the model, using different parameter sets 
         model_spec: ModelSpecification object   
@@ -698,6 +729,11 @@ def generate_model_timecourse_data(model_spec: ModelSpecification,
                                    simulation_params={'start': 0, 'end': 500, 'points': 100}, 
                                    capture_species='all', 
                                    n_cores=1, verbose=False):
+    warnings.warn(
+        "generate_model_timecourse_data is deprecated. Use make_timecourse_data from models.utils.make_timecourse_data instead.",
+        DeprecationWarning,
+        stacklevel=2
+    )
     # validate the simulation parameters
     if 'start' not in simulation_params or 'end' not in simulation_params or 'points' not in simulation_params:
         raise ValueError(
@@ -775,6 +811,11 @@ def generate_model_timecourse_data_v3(all_species: dict,
                                    feature_df: pd.DataFrame, 
                                    simulation_params={'start': 0, 'end': 500, 'points': 100}, 
                                    n_cores=1, verbose=False):
+    warnings.warn(
+        "generate_model_timecourse_data_v3 is deprecated. Use make_timecourse_data_v3 from models.utils.make_timecourse_data instead.",
+        DeprecationWarning,
+        stacklevel=2
+    )
     # validate the simulation parameters
     if 'start' not in simulation_params or 'end' not in simulation_params or 'points' not in simulation_params:
         raise ValueError(
@@ -835,6 +876,11 @@ def generate_model_timecourse_data_diff_build_v3(all_species: dict,
                                                  parameter_set: list[dict], 
                                                  simulation_params={'start': 0, 'end': 500, 'points': 100}, 
                                                  capture_species='all', n_cores=1, verbose=False):
+    warnings.warn(
+        "generate_model_timecourse_data_diff_build_v3 is deprecated. Use make_timecourse_data_diff_build_v3 from models.utils.make_timecourse_data instead.",
+        DeprecationWarning,
+        stacklevel=2
+    )
     '''
     Generate the time course data for the model, using different parameter sets 
         model_spec: ModelSpecification object   

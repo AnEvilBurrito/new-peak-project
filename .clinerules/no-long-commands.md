@@ -2,3 +2,4 @@
 - commands should be less than 200 characters
 - if you need to run a long command, split it into multiple smaller commands
 - also activate the `new-peak-project` python environment before running tests, tests are managed by pytest
+- In PowerShell, chain commands with semicolons (;), not double ampersands (&&). Use PowerShell-native syntax: cd "path"; dir or Set-Location "path"; Get-ChildItem.

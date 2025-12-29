@@ -66,7 +66,7 @@ logger.info(f"Total regulations: {len(model_spec.regulations)}")
 model = model_spec.generate_network(
     network_name="ModelSpec4_Network",
     mean_range_species=(200, 1000),  # Initial concentrations range
-    rangeScale_params=(0.5, 2),  # Parameter scale range
+    rangeScale_params=(0.7, 1.3),  # Parameter scale range
     rangeMultiplier_params=(0.99, 1.01),  # Small additional variation
     random_seed=42,
     receptor_basal_activation=True,  # Receptors have basal activation

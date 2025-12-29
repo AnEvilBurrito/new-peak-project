@@ -1,8 +1,5 @@
 #!/bin/bash
 
-# Batch Parameter Distortion Execution Script
-# Section 4 / Experiment 01 / Version 1
-
 # Set script variables with absolute paths
 VENV_PATH="/home/dawsonlan/new-peak-project/.venv/bin/activate"
 PYTHON_SCRIPT="/home/dawsonlan/new-peak-project/src/notebooks/ch5-paper/data-eng/expression-noise-v1.py"
@@ -31,7 +28,6 @@ fi
 
 # Source the virtual environment
 echo "🔧 Activating virtual environment..."
-    echo "❌ Virtual environment not found at $VENV_PATH"
 source "$VENV_PATH"
 
 # Set environment variables based on .env configuration

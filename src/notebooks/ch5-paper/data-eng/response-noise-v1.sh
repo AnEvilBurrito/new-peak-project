@@ -31,7 +31,6 @@ fi
 
 # Source the virtual environment
 echo "🔧 Activating virtual environment..."
-    echo "❌ Virtual environment not found at $VENV_PATH"
 source "$VENV_PATH"
 
 # Set environment variables based on .env configuration

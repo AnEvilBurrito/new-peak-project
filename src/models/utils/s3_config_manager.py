@@ -391,6 +391,55 @@ class S3ConfigManager:
 
         else:
             raise ValueError("Unsupported data format. Use 'pkl', 'csv', 'parquet', or 'txt'")
+
+    def save_data_from_path(self, s3_key, data, data_format='pkl', **kwargs):
+        """
+        Save data to S3 using a direct key path.
+        
+        Args:
+            s3_key: Full S3 key path (e.g., 'new-peak-project/experiments/ch5-paper/00_99_v1_test-experiment/data/v1_test_data.pkl')
+            data: Data to save (any serializable object)
+            data_format: Format ('pkl', 'csv', 'parquet', 'txt')
+            **kwargs: Additional arguments for serialization (e.g., pickle protocol, CSV options)
+        
+        Raises:
+            ValueError: If data_format is unsupported or data lacks required methods (to_csv/to_parquet)
+        """
+        # Serialize data based on format (reuse logic from save_data)
+        if data_format == 'pkl':
+            body = io.BytesIO()
+            pickle.dump(data, body, **kwargs)
+            content_type = 'application/octet-stream'
+            
+        elif data_format == 'csv':
+            if hasattr(data, 'to_csv'):
+                body = io.StringIO()
+                # Ensure index is not saved to avoid column mismatch
+                kwargs.setdefault('index', False)
+                data.to_csv(body, **kwargs)
+                content_type = 'text/csv'
+            else:
+                raise ValueError("Data does not have a 'to_csv' method")
+                
+        elif data_format == 'parquet':
+            if hasattr(data, 'to_parquet'):
+                body = io.BytesIO()
+                # Ensure index is not saved for parquet as well
+                kwargs.setdefault('index', False)
+                data.to_parquet(body, **kwargs)
+                content_type = 'application/octet-stream'
+            else:
+                raise ValueError("Data does not have a 'to_parquet' method")
+                
+        elif data_format == 'txt':
+            body = str(data)
+            content_type = 'text/plain'
+            
+        else:
+            raise ValueError("Unsupported data format. Use 'pkl', 'csv', 'parquet', or 'txt'")
+        
+        # Upload to S3
+        self._upload_with_progress(body, s3_key, content_type=content_type)
     
     def save_figure(self, notebook_config, fig, fig_name, fig_format='png', **kwargs):
         """
@@ -456,6 +505,49 @@ class S3ConfigManager:
             
         return result
     
+    def list_files_from_path(self, s3_prefix):
+        """
+        List all files under a given S3 prefix (directory).
+        
+        Args:
+            s3_prefix: S3 prefix (e.g., 'new-peak-project/experiments/ch5-paper/00_99_v1_test-experiment/')
+            
+        Returns:
+            List of S3 keys under the prefix
+        """
+        keys = []
+        try:
+            paginator = self.s3_client.get_paginator('list_objects_v2')
+            for page in paginator.paginate(Bucket=self.bucket_name, Prefix=s3_prefix):
+                if 'Contents' in page:
+                    for obj in page['Contents']:
+                        keys.append(obj['Key'])
+        except ClientError as e:
+            print(f"Error listing files: {e}")
+            
+        return keys
+
+    def delete_files_from_path(self, s3_prefix):
+        """
+        Delete all files under a given S3 prefix.
+        
+        Args:
+            s3_prefix: S3 prefix (e.g., 'new-peak-project/experiments/ch5-paper/00_99_v1_test-experiment/')
+        """
+        keys = self.list_files_from_path(s3_prefix)
+        
+        if keys:
+            # Delete objects in batches of 1000 (S3 limit)
+            for i in range(0, len(keys), 1000):
+                batch = keys[i:i+1000]
+                delete_objects = [{'Key': key} for key in batch]
+                self.s3_client.delete_objects(
+                    Bucket=self.bucket_name,
+                    Delete={'Objects': delete_objects}
+                )
+                
+            print(f"Deleted {len(keys)} files from prefix: {s3_prefix}")
+
     def delete_experiment_files(self, notebook_config, delete_config=True, delete_data=True, delete_figures=True):
         """
         Delete all files for an experiment in S3.

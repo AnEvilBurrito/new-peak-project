@@ -16,27 +16,6 @@ S3_REGION_NAME='us-east-1'
 SAVE_RESULT_PATH='new-peak-project/experiments/ch5-paper' # s3 key prefix for files 
 CONFIG_PATH='data-and-mechanism-project' 
 ```
-## Versioning and file structure 
-
-Main folder: `ch5-paper`
-Subfolders will be labelled as `section-1`, `section-2` etc.  
-Notebook located in sub-folders will be named as: `{section-number}_{exp-number}_{version-number}_{experiment-title}`
-Subsequent Results from notebook will be saved at key: `{SAVE_RESULT_PATH}/{section-number}_{exp-number}_{version-number}_{experiment-title}/{result-name}.{extension}`
-
-Inside a notebook, the following parameters will have to be defined: 
-```python
-notebook_name = 'example_name' # this is 'experiment-title'
-exp_number = '01' # representing the 1st experiment in a section
-section_number = '02' # meaning that this notebook is located in the 'section-2'
-version_number = 'v1' # for differentiating different result versions
-notebook_path = f'{SAVE_RESULT_PATH}/{exp-number}_{version-number}_{experiment-title}'
-### Key notebook parameters 
-# ... 
-# ... 
-# a .yml file will be generated at the end of the parameters and saved at {SAVE_RESULT_PATH}/{notebook_path}/{version_number}_config.yml
-```
-
-Version number is changed when parameters which affects the data/results generation for the notebook is changed. 
 
 ## Data models and methods
 

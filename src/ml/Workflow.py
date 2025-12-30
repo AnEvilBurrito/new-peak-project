@@ -21,7 +21,7 @@ def build_pipeline(model, scale=False):
 
 
 
-def evaluate_model(model, model_name, feature_data, feature_data_name, target_data, test_size=0.2, random_state=4):
+def evaluate_model(model, model_name, feature_data, feature_data_name, target_data, test_size=0.2, random_state=42):
     # Align rows between X and y
     common_idx = feature_data.index.intersection(target_data.index)
     X = feature_data.loc[common_idx]
@@ -41,20 +41,26 @@ def evaluate_model(model, model_name, feature_data, feature_data_name, target_da
     }
 
 
-def batch_eval_standard(feature_data_list, feature_data_names, target_data, target_name, 
-                     num_repeats=10,
-                     test_size=0.2,
-                     o_random_seed=42, 
-                     n_jobs=-1):
+def batch_eval(feature_data_list, feature_data_names, target_data, target_name, 
+               all_models, all_models_desc,
+               num_repeats=10,
+               test_size=0.2,
+               o_random_seed=42, 
+               n_jobs=-1):
     """
-    Evaluate multiple models on multiple feature datasets against one target dataset.
+    Evaluate multiple custom models on multiple feature datasets against one target dataset.
     
     Parameters:
     - feature_data_list: List of DataFrames containing feature data.
     - feature_data_names: List of names corresponding to each feature dataset.
     - target_data: DataFrame containing the target variable.
     - target_name: Name of the target variable column in target_data.
-    - o_random_seed: Random seed for reproducibility.
+    - all_models: List of model/pipeline objects to evaluate.
+    - all_models_desc: List of descriptive names corresponding to each model.
+    - num_repeats: Number of random train/test splits to evaluate (default: 10).
+    - test_size: Proportion of data to use for testing (default: 0.2).
+    - o_random_seed: Random seed for reproducibility of random states (default: 42).
+    - n_jobs: Number of parallel jobs to run (-1 for all available cores, 1 for serial).
     
     Returns:
     - DataFrame containing evaluation metrics for each model and feature dataset.
@@ -69,15 +75,15 @@ def batch_eval_standard(feature_data_list, feature_data_names, target_data, targ
     if target_name not in target_data.columns:
         raise ValueError(f"Target name '{target_name}' not found in target_data columns.")
     
-    all_models = [
-        build_pipeline(LinearRegression()),
-        build_pipeline(RandomForestRegressor(n_estimators=100, random_state=o_random_seed)),
-        build_pipeline(GradientBoostingRegressor(n_estimators=100, random_state=o_random_seed)),
-        build_pipeline(SVR(max_iter=10000), scale=True),
-        build_pipeline(MLPRegressor(hidden_layer_sizes=(20,), max_iter=10000, random_state=o_random_seed), scale=True)
-    ]
-
-    all_models_desc = ['Linear Regression', 'Random Forest', 'Gradient Boosting', 'Support Vector Machine', 'Neural Network']
+    if not isinstance(all_models, list) or not isinstance(all_models_desc, list):
+        raise ValueError("all_models and all_models_desc must be lists.")
+    
+    if len(all_models) != len(all_models_desc):
+        raise ValueError("all_models and all_models_desc must have the same length.")
+    
+    if len(all_models) == 0:
+        raise ValueError("all_models list cannot be empty.")
+    
     zipped_model_data = list(zip(all_models, all_models_desc))
     all_features = feature_data_list
     all_features_desc = feature_data_names
@@ -90,10 +96,7 @@ def batch_eval_standard(feature_data_list, feature_data_names, target_data, targ
     metric_data = []
     if n_jobs == 1:          
         for (feature_data, feature_data_name) in tqdm(zipped_feature_data):
-            # print('Feature Data:', feature_data_name)
-            # print('Feature Data Shape:', feature_data.shape)
             for (model, model_name) in zipped_model_data:
-                # print('Model:', model_name)
                 for rand in all_random_states:
                     metrics = evaluate_model(model, model_name, feature_data, feature_data_name, target_data[target_name], random_state=rand, test_size=test_size)
                     metric_data.append(metrics)
@@ -102,7 +105,7 @@ def batch_eval_standard(feature_data_list, feature_data_names, target_data, targ
         # parallelise the model evaluation process using joblib
         from joblib import Parallel, delayed
 
-        metric_data = Parallel(n_jobs=-1)(delayed(evaluate_model)(model, model_name, feature_data, feature_data_name, target_data[target_name], random_state=rand, test_size=test_size) 
+        metric_data = Parallel(n_jobs=n_jobs)(delayed(evaluate_model)(model, model_name, feature_data, feature_data_name, target_data[target_name], random_state=rand, test_size=test_size) 
                                         for (feature_data, feature_data_name) in zipped_feature_data
                                         for (model, model_name) in zipped_model_data
                                         for rand in all_random_states)
@@ -110,3 +113,51 @@ def batch_eval_standard(feature_data_list, feature_data_names, target_data, targ
     # make a dataframe of the metric data
     metric_df = pd.DataFrame(metric_data)
     return metric_df
+
+
+def batch_eval_standard(feature_data_list, feature_data_names, target_data, target_name, 
+                     num_repeats=10,
+                     test_size=0.2,
+                     o_random_seed=42, 
+                     n_jobs=-1):
+    """
+    Evaluate multiple standard models on multiple feature datasets against one target dataset.
+    
+    Parameters:
+    - feature_data_list: List of DataFrames containing feature data.
+    - feature_data_names: List of names corresponding to each feature dataset.
+    - target_data: DataFrame containing the target variable.
+    - target_name: Name of the target variable column in target_data.
+    - num_repeats: Number of random train/test splits to evaluate (default: 10).
+    - test_size: Proportion of data to use for testing (default: 0.2).
+    - o_random_seed: Random seed for reproducibility (default: 42).
+    - n_jobs: Number of parallel jobs to run (-1 for all available cores, 1 for serial).
+    
+    Returns:
+    - DataFrame containing evaluation metrics for each model and feature dataset.
+    """
+    
+    # Define the standard set of models
+    all_models = [
+        build_pipeline(LinearRegression()),
+        build_pipeline(RandomForestRegressor(n_estimators=100, random_state=o_random_seed)),
+        build_pipeline(GradientBoostingRegressor(n_estimators=100, random_state=o_random_seed)),
+        build_pipeline(SVR(max_iter=10000), scale=True),
+        build_pipeline(MLPRegressor(hidden_layer_sizes=(20,), max_iter=10000, random_state=o_random_seed), scale=True)
+    ]
+
+    all_models_desc = ['Linear Regression', 'Random Forest', 'Gradient Boosting', 'Support Vector Machine', 'Neural Network']
+    
+    # Use the new batch_eval function with standard models
+    return batch_eval(
+        feature_data_list=feature_data_list,
+        feature_data_names=feature_data_names,
+        target_data=target_data,
+        target_name=target_name,
+        all_models=all_models,
+        all_models_desc=all_models_desc,
+        num_repeats=num_repeats,
+        test_size=test_size,
+        o_random_seed=o_random_seed,
+        n_jobs=n_jobs
+    )

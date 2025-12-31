@@ -41,7 +41,11 @@ EXPERIMENT_TYPES = ["expression-noise-v1"]  # List of experiment types to proces
 # EXPERIMENT_TYPES = None  # Process ALL experiments in CSV
 
 # Model configuration
-MODEL_NAME = None  # Auto-detect from CSV if None, otherwise specify: "sy_simple"
+MODEL_NAMES = None  # Auto-detect from CSV if None, otherwise specify: "sy_simple" or ["sy_simple", "v1"]
+# Options:
+# MODEL_NAMES = None  # Auto-detect from CSV (uses first model found)
+# MODEL_NAMES = "sy_simple"  # Single model
+# MODEL_NAMES = ["sy_simple", "v1", "fgfr4_model"]  # Multiple models
 
 # Evaluation parameters
 NUM_REPEATS = 10     # Number of random train/test splits
@@ -83,6 +87,30 @@ def validate_csv_structure(df: pd.DataFrame) -> bool:
         return False
     
     return True
+
+
+def normalize_model_names(model_names):
+    """Convert model_names configuration to list format"""
+    if model_names is None:
+        return None
+    elif isinstance(model_names, str):
+        return [model_names]
+    elif isinstance(model_names, list):
+        return model_names
+    else:
+        logger.warning(f"Unexpected model_names type: {type(model_names)}, converting to list")
+        return [str(model_names)]
+
+
+def filter_tasks_by_model(df: pd.DataFrame, model_names: Optional[List[str]]) -> pd.DataFrame:
+    """Filter tasks by model name(s)"""
+    if model_names is None:
+        return df
+    
+    filtered_df = df[df["model_name"].isin(model_names)].copy()
+    logger.info(f"Filtered to {len(filtered_df)} tasks from {len(df)} total for models: {model_names}")
+    
+    return filtered_df
 
 
 def filter_tasks_by_experiment(df: pd.DataFrame, experiment_types: Optional[List[str]]) -> pd.DataFrame:
@@ -324,11 +352,11 @@ def save_results_locally(
 
 
 def main():
-    """Main execution function using configuration variables"""
+    """Main execution function using configuration variables with multi-model support"""
     # Use configuration variables
     csv_path = CSV_PATH
     experiment_types = EXPERIMENT_TYPES
-    model_name = MODEL_NAME
+    model_names = MODEL_NAMES
     num_repeats = NUM_REPEATS
     test_size = TEST_SIZE
     random_seed = RANDOM_SEED
@@ -337,15 +365,19 @@ def main():
     output_dir = OUTPUT_DIR
     skip_failed = SKIP_FAILED
     
+    # Normalize model names to list format
+    model_names_normalized = normalize_model_names(model_names)
+    
     logger.info("🚀 Starting ML Batch Evaluation Runner (Configuration Version)")
     logger.info(f"CSV: {csv_path}")
     logger.info(f"Experiment types: {experiment_types}")
     logger.info(f"Upload to S3: {upload_s3}")
-    logger.info(f"Model name: {model_name or 'Auto-detect from CSV'}")
+    logger.info(f"Model names: {model_names_normalized or 'Auto-detect from CSV'}")
     logger.info(f"Num repeats: {num_repeats}, Test size: {test_size}")
     logger.info(f"Random seed: {random_seed}, Parallel jobs: {n_jobs}")
     
     start_time = datetime.now()
+    overall_results = {}
     
     try:
         # Load and validate CSV
@@ -359,19 +391,11 @@ def main():
         if not validate_csv_structure(task_df):
             sys.exit(1)
         
-        # Determine model name
-        if model_name is None:
-            model_name = task_df["model_name"].iloc[0]
-        logger.info(f"Model name: {model_name}")
-        
-        # Filter tasks
-        filtered_df = filter_tasks_by_experiment(task_df, experiment_types)
-        if len(filtered_df) == 0:
-            logger.error("No tasks match the specified criteria")
-            sys.exit(1)
-        
-        # Group by experiment type
-        grouped_tasks = group_tasks_by_experiment(filtered_df)
+        # Determine models to process
+        if model_names_normalized is None:
+            # Auto-detect: use all unique models in CSV
+            model_names_normalized = task_df["model_name"].unique().tolist()
+            logger.info(f"Auto-detected models: {model_names_normalized}")
         
         # Initialize S3 manager if needed
         s3_manager = None
@@ -387,65 +411,94 @@ def main():
             "n_jobs": n_jobs
         }
         
-        # Process each experiment type
-        all_results = {}
-        all_failed_tasks = []
-        
-        for experiment_type, exp_task_df in grouped_tasks.items():
+        # Process each model
+        for model_name in model_names_normalized:
             logger.info(f"\n{'='*60}")
-            logger.info(f"Processing experiment: {experiment_type}")
+            logger.info(f"PROCESSING MODEL: {model_name}")
             logger.info(f"{'='*60}")
             
-            # Run batch evaluation
-            results_df, failed_tasks_df, metadata = run_batch_evaluation_for_experiment(
-                task_df=exp_task_df,
-                experiment_type=experiment_type,
-                model_name=model_name,
-                s3_manager=s3_manager,
-                evaluation_params=evaluation_params
-            )
+            # Filter tasks for this model
+            model_tasks = filter_tasks_by_model(task_df, [model_name])
+            if len(model_tasks) == 0:
+                logger.warning(f"No tasks found for model {model_name}, skipping")
+                continue
             
-            # Generate summary statistics
-            summary_df = None
-            if results_df is not None:
-                summary_df = generate_summary_stats(results_df)
+            # Filter by experiment types
+            filtered_df = filter_tasks_by_experiment(model_tasks, experiment_types)
+            if len(filtered_df) == 0:
+                logger.warning(f"No tasks match experiment criteria for model {model_name}, skipping")
+                continue
             
-            # Save results
-            if upload_s3 and s3_manager is not None:
-                s3_paths = save_results_to_s3(
+            # Group by experiment type
+            grouped_tasks = group_tasks_by_experiment(filtered_df)
+            
+            # Process each experiment type for this model
+            model_results = {}
+            model_failed_tasks = []
+            
+            for experiment_type, exp_task_df in grouped_tasks.items():
+                logger.info(f"\n  Processing experiment: {experiment_type}")
+                logger.info(f"  {'-'*40}")
+                
+                # Run batch evaluation
+                results_df, failed_tasks_df, metadata = run_batch_evaluation_for_experiment(
+                    task_df=exp_task_df,
+                    experiment_type=experiment_type,
+                    model_name=model_name,
+                    s3_manager=s3_manager,
+                    evaluation_params=evaluation_params
+                )
+                
+                # Generate summary statistics
+                summary_df = None
+                if results_df is not None:
+                    summary_df = generate_summary_stats(results_df)
+                
+                # Save results
+                if upload_s3 and s3_manager is not None:
+                    s3_paths = save_results_to_s3(
+                        results_df=results_df,
+                        summary_df=summary_df,
+                        metadata=metadata,
+                        failed_tasks_df=failed_tasks_df,
+                        s3_manager=s3_manager,
+                        experiment_type=experiment_type,
+                        model_name=model_name
+                    )
+                    metadata["s3_paths"] = s3_paths
+                
+                # Always save locally
+                local_paths = save_results_locally(
                     results_df=results_df,
                     summary_df=summary_df,
                     metadata=metadata,
                     failed_tasks_df=failed_tasks_df,
-                    s3_manager=s3_manager,
+                    output_dir=output_dir,
                     experiment_type=experiment_type,
                     model_name=model_name
                 )
-                metadata["s3_paths"] = s3_paths
+                metadata["local_paths"] = local_paths
+                
+                # Store results
+                model_results[experiment_type] = {
+                    "results": results_df,
+                    "summary": summary_df,
+                    "metadata": metadata
+                }
+                
+                if failed_tasks_df is not None:
+                    model_failed_tasks.append(failed_tasks_df)
+                
+                logger.info(f"  ✅ Completed experiment: {experiment_type}")
             
-            # Always save locally
-            local_paths = save_results_locally(
-                results_df=results_df,
-                summary_df=summary_df,
-                metadata=metadata,
-                failed_tasks_df=failed_tasks_df,
-                output_dir=output_dir,
-                experiment_type=experiment_type,
-                model_name=model_name
-            )
-            metadata["local_paths"] = local_paths
-            
-            # Store results
-            all_results[experiment_type] = {
-                "results": results_df,
-                "summary": summary_df,
-                "metadata": metadata
+            # Store model results
+            overall_results[model_name] = {
+                "experiment_results": model_results,
+                "failed_tasks": model_failed_tasks,
+                "total_experiments": len(model_results)
             }
             
-            if failed_tasks_df is not None:
-                all_failed_tasks.append(failed_tasks_df)
-            
-            logger.info(f"✅ Completed experiment: {experiment_type}")
+            logger.info(f"✅ Completed processing for model: {model_name}")
         
         # Calculate execution time
         end_time = datetime.now()
@@ -455,19 +508,34 @@ def main():
         logger.info(f"\n{'='*60}")
         logger.info("📊 EXECUTION SUMMARY")
         logger.info(f"{'='*60}")
-        logger.info(f"Total experiments processed: {len(all_results)}")
+        logger.info(f"Total models processed: {len(overall_results)}")
         logger.info(f"Total execution time: {duration:.2f} seconds ({duration/60:.2f} minutes)")
         
-        successful_exps = [exp for exp, data in all_results.items() if data["results"] is not None]
-        failed_exps = [exp for exp, data in all_results.items() if data["results"] is None]
+        successful_models = []
+        failed_models = []
         
-        logger.info(f"✅ Successful experiments: {len(successful_exps)}")
-        if successful_exps:
-            logger.info(f"  - {', '.join(successful_exps)}")
+        for model_name, model_data in overall_results.items():
+            successful_exps = [exp for exp, data in model_data["experiment_results"].items() if data["results"] is not None]
+            failed_exps = [exp for exp, data in model_data["experiment_results"].items() if data["results"] is None]
+            
+            if failed_exps:
+                failed_models.append(model_name)
+            else:
+                successful_models.append(model_name)
+            
+            logger.info(f"\n  Model: {model_name}")
+            logger.info(f"    Experiments: {len(model_data['experiment_results'])} total")
+            logger.info(f"    Successful: {len(successful_exps)}")
+            if failed_exps:
+                logger.info(f"    Failed: {len(failed_exps)} - {', '.join(failed_exps)}")
         
-        if failed_exps:
-            logger.info(f"❌ Failed experiments: {len(failed_exps)}")
-            logger.info(f"  - {', '.join(failed_exps)}")
+        logger.info(f"\n✅ Successful models: {len(successful_models)}")
+        if successful_models:
+            logger.info(f"  - {', '.join(successful_models)}")
+        
+        if failed_models:
+            logger.info(f"❌ Models with failures: {len(failed_models)}")
+            logger.info(f"  - {', '.join(failed_models)}")
         
         # Save overall summary
         if output_dir:
@@ -475,15 +543,19 @@ def main():
             overall_metadata = {
                 "script": "run-ml-batch-v1.py",
                 "csv_source": csv_path,
-                "model_name": model_name,
-                "experiment_types": list(grouped_tasks.keys()),
+                "model_names": model_names_normalized,
+                "experiment_types": experiment_types,
                 "evaluation_params": evaluation_params,
                 "execution_time_seconds": duration,
                 "start_time": start_time.isoformat(),
                 "end_time": end_time.isoformat(),
-                "experiment_results": {
-                    exp: {"status": "success" if data["results"] is not None else "failed"}
-                    for exp, data in all_results.items()
+                "models_processed": len(overall_results),
+                "model_results": {
+                    model_name: {
+                        "experiments_processed": len(data["experiment_results"]),
+                        "status": "success" if model_name in successful_models else "partial_failure"
+                    }
+                    for model_name, data in overall_results.items()
                 }
             }
             

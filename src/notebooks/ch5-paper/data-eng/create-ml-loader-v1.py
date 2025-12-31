@@ -8,8 +8,9 @@ Supports multiple experiment types:
 - expression-noise-v1.py
 - parameter-distortion-v2.py  
 - response-noise-v1.py
-"""
 
+Now uses the task generator classes from individual script files, avoiding duplication.
+"""
 import sys
 import os
 import pandas as pd
@@ -26,201 +27,58 @@ sys.path.insert(0, src_dir)
 
 from models.utils.s3_config_manager import S3ConfigManager
 
+# Import task generator classes from individual scripts using importlib to handle hyphens
+import importlib.util
+
+# Helper function to import from hyphenated filenames
+def import_from_hyphenated_file(filepath, class_name):
+    """Import a class from a Python file with hyphenated name"""
+    module_name = filepath.replace('-', '_').replace('.py', '')
+    file_dir = os.path.dirname(filepath)
+    
+    # Add the file's directory to sys.path so it can find local imports
+    original_sys_path = sys.path.copy()
+    if file_dir not in sys.path:
+        sys.path.insert(0, file_dir)
+    
+    try:
+        spec = importlib.util.spec_from_file_location(module_name, filepath)
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[module_name] = module
+        spec.loader.exec_module(module)
+        return getattr(module, class_name)
+    finally:
+        # Restore original sys.path
+        sys.path = original_sys_path
+
+# Get current directory
+current_dir = os.path.dirname(os.path.abspath(__file__))
+
+# Import task generator classes
+ExpressionNoiseTaskGenerator = import_from_hyphenated_file(
+    os.path.join(current_dir, "expression-noise-v1.py"),
+    "ExpressionNoiseTaskGenerator"
+)
+
+ParameterDistortionTaskGenerator = import_from_hyphenated_file(
+    os.path.join(current_dir, "parameter-distortion-v2.py"),
+    "ParameterDistortionTaskGenerator"
+)
+
+ResponseNoiseTaskGenerator = import_from_hyphenated_file(
+    os.path.join(current_dir, "response-noise-v1.py"),
+    "ResponseNoiseTaskGenerator"
+)
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-class ExperimentPattern:
-    """Base class for experiment pattern definitions"""
-    
-    def __init__(self, name: str, model_name: str = "sy_simple"):
-        self.name = name
-        self.model_name = model_name
-        
-    def get_feature_files(self, level: Any) -> List[Dict[str, str]]:
-        """Return list of feature file patterns for a given level"""
-        raise NotImplementedError
-        
-    def get_target_files(self, level: Any) -> List[Dict[str, str]]:
-        """Return list of target file patterns for a given level"""
-        raise NotImplementedError
-        
-    def get_levels(self) -> List[Any]:
-        """Return list of levels for this experiment"""
-        raise NotImplementedError
-        
-    def get_base_folder(self) -> str:
-        """Return base folder name for this experiment"""
-        raise NotImplementedError
-
-
-class ExpressionNoisePattern(ExperimentPattern):
-    """Pattern for expression-noise-v1.py datasets"""
-    
-    def __init__(self, model_name: str = "sy_simple"):
-        super().__init__("expression-noise-v1", model_name)
-        self.noise_levels = [0, 0.1, 0.2, 0.3, 0.5, 1.0]
-        
-    def get_levels(self) -> List[float]:
-        return self.noise_levels
-        
-    def get_base_folder(self) -> str:
-        return f"{self.model_name}_expression_noise_v1"
-        
-    def get_feature_files(self, noise_level: float) -> List[Dict[str, str]]:
-        """Get feature files for a given noise level"""
-        base_path = f"{self.get_base_folder()}/noise_{noise_level}"
-        
-        feature_files = [
-            {
-                "path": f"{base_path}/noisy_features.pkl",
-                "label": f"noisy_features_{noise_level}"
-            },
-            {
-                "path": f"{base_path}/dynamic_features.pkl", 
-                "label": f"dynamic_features_{noise_level}"
-            },
-            {
-                "path": f"{base_path}/dynamic_features_no_outcome.pkl",
-                "label": f"dynamic_features_no_outcome_{noise_level}"
-            },
-            {
-                "path": f"{base_path}/last_time_points.pkl",
-                "label": f"last_time_points_{noise_level}"
-            },
-            {
-                "path": f"{base_path}/last_time_points_no_outcome.pkl",
-                "label": f"last_time_points_no_outcome_{noise_level}"
-            }
-        ]
-        
-        # Also include original features for comparison at noise_level=0
-        if noise_level == 0:
-            feature_files.append({
-                "path": f"{base_path}/original_features.pkl",
-                "label": "original_features_0"
-            })
-            
-        return feature_files
-        
-    def get_target_files(self, noise_level: float) -> List[Dict[str, str]]:
-        """Get target files for a given noise level"""
-        base_path = f"{self.get_base_folder()}/noise_{noise_level}"
-        
-        # For expression noise, we have both original_targets and targets
-        # Based on user requirements, use original_targets
-        return [
-            {
-                "path": f"{base_path}/original_targets.pkl",
-                "label": "original_targets"
-            }
-        ]
-
-
-class ParameterDistortionPattern(ExperimentPattern):
-    """Pattern for parameter-distortion-v2.py datasets"""
-    
-    def __init__(self, model_name: str = "sy_simple"):
-        super().__init__("parameter-distortion-v2", model_name)
-        self.distortion_factors = [0, 1.1, 1.3, 1.5, 2.0, 3.0]
-        
-    def get_levels(self) -> List[float]:
-        return self.distortion_factors
-        
-    def get_base_folder(self) -> str:
-        return f"{self.model_name}_parameter_distortion_v2"
-        
-    def get_feature_files(self, distortion_factor: float) -> List[Dict[str, str]]:
-        """Get feature files for a given distortion factor"""
-        base_path = f"{self.get_base_folder()}/distortion_{distortion_factor}"
-        
-        return [
-            {
-                "path": f"{base_path}/features.pkl",
-                "label": f"features_{distortion_factor}"
-            },
-            {
-                "path": f"{base_path}/dynamic_features.pkl",
-                "label": f"dynamic_features_{distortion_factor}"
-            },
-            {
-                "path": f"{base_path}/dynamic_features_no_outcome.pkl",
-                "label": f"dynamic_features_no_outcome_{distortion_factor}"
-            },
-            {
-                "path": f"{base_path}/last_time_points.pkl",
-                "label": f"last_time_points_{distortion_factor}"
-            },
-            {
-                "path": f"{base_path}/last_time_points_no_outcome.pkl",
-                "label": f"last_time_points_no_outcome_{distortion_factor}"
-            }
-        ]
-        
-    def get_target_files(self, distortion_factor: float) -> List[Dict[str, str]]:
-        """Get target files for a given distortion factor"""
-        base_path = f"{self.get_base_folder()}/distortion_{distortion_factor}"
-        
-        return [
-            {
-                "path": f"{base_path}/targets.pkl",
-                "label": "original_targets"
-            }
-        ]
-
-
-class ResponseNoisePattern(ExperimentPattern):
-    """Pattern for response-noise-v1.py datasets"""
-    
-    def __init__(self, model_name: str = "sy_simple"):
-        super().__init__("response-noise-v1", model_name)
-        self.noise_levels = [0, 0.05, 0.1, 0.2, 0.3, 0.5]
-        
-    def get_levels(self) -> List[float]:
-        return self.noise_levels
-        
-    def get_base_folder(self) -> str:
-        return f"{self.model_name}_response_noise_v1"
-        
-    def get_feature_files(self, noise_level: float) -> List[Dict[str, str]]:
-        """Get feature files for a given noise level"""
-        base_path = f"{self.get_base_folder()}/noise_{noise_level}"
-        
-        return [
-            {
-                "path": f"{base_path}/features.pkl",
-                "label": f"features_{noise_level}"
-            },
-            {
-                "path": f"{base_path}/dynamic_features.pkl",
-                "label": f"dynamic_features_{noise_level}"
-            },
-            {
-                "path": f"{base_path}/dynamic_features_no_outcome.pkl",
-                "label": f"dynamic_features_no_outcome_{noise_level}"
-            },
-            {
-                "path": f"{base_path}/last_time_points.pkl",
-                "label": f"last_time_points_{noise_level}"
-            },
-            {
-                "path": f"{base_path}/last_time_points_no_outcome.pkl",
-                "label": f"last_time_points_no_outcome_{noise_level}"
-            }
-        ]
-        
-    def get_target_files(self, noise_level: float) -> List[Dict[str, str]]:
-        """Get target files for a given noise level"""
-        base_path = f"{self.get_base_folder()}/noise_{noise_level}"
-        
-        # For response noise, we have both clean_targets and noisy_targets
-        # Based on user requirements, use clean_targets (original)
-        return [
-            {
-                "path": f"{base_path}/clean_targets.pkl",
-                "label": "original_targets"
-            }
-        ]
+# Note: Pattern classes are now imported from individual script files
+# ExpressionNoiseTaskGenerator from expression_noise_v1.py
+# ParameterDistortionTaskGenerator from parameter_distortion_v2.py  
+# ResponseNoiseTaskGenerator from response_noise_v1.py
+# These classes inherit from BaseTaskGenerator in ml_task_utils.py
 
 
 class BatchTaskGenerator:
@@ -228,15 +86,15 @@ class BatchTaskGenerator:
     
     def __init__(self, s3_manager: Optional[S3ConfigManager] = None):
         self.s3_manager = s3_manager or S3ConfigManager()
-        self.experiment_patterns = {
-            "expression-noise-v1": ExpressionNoisePattern,
-            "parameter-distortion-v2": ParameterDistortionPattern,
-            "response-noise-v1": ResponseNoisePattern
+        self.experiment_generators = {
+            "expression-noise-v1": ExpressionNoiseTaskGenerator,
+            "parameter-distortion-v2": ParameterDistortionTaskGenerator,
+            "response-noise-v1": ResponseNoiseTaskGenerator
         }
         
-    def register_pattern(self, name: str, pattern_class):
-        """Register a new experiment pattern for extensibility"""
-        self.experiment_patterns[name] = pattern_class
+    def register_generator(self, name: str, generator_class):
+        """Register a new experiment generator for extensibility"""
+        self.experiment_generators[name] = generator_class
         
     def generate_task_list(
         self, 
@@ -260,16 +118,23 @@ class BatchTaskGenerator:
         task_rows = []
         
         for exp_type in experiment_types:
-            if exp_type not in self.experiment_patterns:
+            if exp_type not in self.experiment_generators:
                 logger.warning(f"Unknown experiment type: {exp_type}. Skipping.")
                 continue
                 
-            pattern_class = self.experiment_patterns[exp_type]
-            pattern = pattern_class(model_name=model_name)
+            generator_class = self.experiment_generators[exp_type]
+            generator = generator_class(model_name=model_name)
             
-            for level in pattern.get_levels():
-                feature_files = pattern.get_feature_files(level)
-                target_files = pattern.get_target_files(level)
+            # Use the generate_task_list method from the individual generator
+            # This method handles level iteration and file combinations internally
+            # but we need to integrate with our verification logic
+            
+            # For backward compatibility, we'll manually iterate through levels
+            # and generate task rows, but use the generator's methods
+            
+            for level in generator.get_levels():
+                feature_files = generator.get_feature_files(level)
+                target_files = generator.get_target_files(level)
                 
                 # Create all combinations of feature and target files
                 for feature in feature_files:

@@ -14,6 +14,7 @@ Follows the complete S3 storage pattern of sy_simple-make-data-v1.py.
 
 import sys
 import os
+import argparse
 from dotenv import dotenv_values
 import pandas as pd
 import numpy as np
@@ -35,8 +36,69 @@ from numpy.random import default_rng
 from tqdm import tqdm
 import warnings
 
+# Import shared utilities for CSV generation
+from ml_task_utils import BaseTaskGenerator, save_task_csv, print_task_summary
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+
+class ParameterDistortionTaskGenerator(BaseTaskGenerator):
+    """
+    Task generator for parameter-distortion-v2 experiment pattern.
+    
+    This class encapsulates the pattern-specific logic for generating
+    CSV task lists for parameter distortion experiments.
+    """
+    
+    def __init__(self, model_name: str = "sy_simple"):
+        super().__init__(model_name)
+        self.experiment_type = "parameter-distortion-v2"
+        self.distortion_factors = [0, 1.1, 1.3, 1.5, 2.0, 3.0]
+        
+    def get_levels(self):
+        return self.distortion_factors
+        
+    def get_base_folder(self):
+        return f"{self.model_name}_parameter_distortion_v2"
+        
+    def get_feature_files(self, distortion_factor):
+        """Get feature files for a given distortion factor"""
+        base_path = f"{self.get_base_folder()}/distortion_{distortion_factor}"
+        
+        return [
+            {
+                "path": f"{base_path}/features.pkl",
+                "label": f"features_{distortion_factor}"
+            },
+            {
+                "path": f"{base_path}/dynamic_features.pkl",
+                "label": f"dynamic_features_{distortion_factor}"
+            },
+            {
+                "path": f"{base_path}/dynamic_features_no_outcome.pkl",
+                "label": f"dynamic_features_no_outcome_{distortion_factor}"
+            },
+            {
+                "path": f"{base_path}/last_time_points.pkl",
+                "label": f"last_time_points_{distortion_factor}"
+            },
+            {
+                "path": f"{base_path}/last_time_points_no_outcome.pkl",
+                "label": f"last_time_points_no_outcome_{distortion_factor}"
+            }
+        ]
+        
+    def get_target_files(self, distortion_factor):
+        """Get target files for a given distortion factor"""
+        base_path = f"{self.get_base_folder()}/distortion_{distortion_factor}"
+        
+        return [
+            {
+                "path": f"{base_path}/targets.pkl",
+                "label": "original_targets"
+            }
+        ]
 
 
 def apply_gaussian_distortion(original_params, distortion_factor, seed=42):
@@ -434,8 +496,70 @@ def load_model_objects(model_name, s3_manager):
     return model_spec, model_builder, model_tuner
 
 
+def generate_csv_task_list():
+    """
+    Generate CSV task list for parameter distortion experiments.
+    
+    This function provides a command-line interface for generating
+    CSV task lists without running the full data generation pipeline.
+    """
+    parser = argparse.ArgumentParser(
+        description="Generate CSV task list for parameter-distortion-v2 experiments"
+    )
+    parser.add_argument(
+        "--output", "-o", 
+        required=True,
+        help="Output CSV file path"
+    )
+    parser.add_argument(
+        "--model", 
+        default="sy_simple",
+        help="Model name (default: sy_simple)"
+    )
+    parser.add_argument(
+        "--verify", 
+        action="store_true",
+        help="Verify files exist in S3 before adding to list"
+    )
+    parser.add_argument(
+        "--summary",
+        action="store_true",
+        help="Print summary of generated task list"
+    )
+    
+    args = parser.parse_args()
+    
+    logger.info("🚀 Generating CSV task list for parameter-distortion-v2")
+    
+    # Create task generator
+    generator = ParameterDistortionTaskGenerator(model_name=args.model)
+    
+    # Initialize S3 manager if verification is requested
+    s3_manager = None
+    if args.verify:
+        s3_manager = S3ConfigManager()
+        logger.info("File verification enabled - checking S3 file existence")
+    
+    # Generate task list
+    task_df = generator.generate_task_list(
+        output_csv=args.output,
+        verify_exists=args.verify,
+        s3_manager=s3_manager
+    )
+    
+    if args.summary:
+        print_task_summary(task_df)
+    
+    logger.info(f"✅ CSV generation complete: {args.output}")
+
+
 def main():
     """Main execution function"""
+    # Check if CSV generation mode is requested
+    if len(sys.argv) > 1 and sys.argv[1] in ['--output', '-o', '--generate-csv']:
+        generate_csv_task_list()
+        return
+    
     logger.info("🚀 Starting Complete Parameter Distortion Data Generation")
     
     # Send start notification
@@ -540,4 +664,9 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    # Check command line arguments to determine mode
+    if len(sys.argv) > 1:
+        main()
+    else:
+        # Default: run data generation with default parameters
+        main()

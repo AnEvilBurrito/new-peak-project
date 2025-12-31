@@ -13,6 +13,7 @@ Follows the complete S3 storage pattern of sy_simple-make-data-v1.py.
 
 import sys
 import os
+import argparse
 from dotenv import dotenv_values
 import pandas as pd
 import numpy as np
@@ -34,8 +35,80 @@ from numpy.random import default_rng
 from tqdm import tqdm
 import warnings
 
+# Import shared utilities for CSV generation
+from ml_task_utils import BaseTaskGenerator, save_task_csv, print_task_summary
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+
+class ExpressionNoiseTaskGenerator(BaseTaskGenerator):
+    """
+    Task generator for expression-noise-v1 experiment pattern.
+    
+    This class encapsulates the pattern-specific logic for generating
+    CSV task lists for expression noise experiments.
+    """
+    
+    def __init__(self, model_name: str = "sy_simple"):
+        super().__init__(model_name)
+        self.experiment_type = "expression-noise-v1"
+        self.noise_levels = [0, 0.1, 0.2, 0.3, 0.5, 1.0]
+        
+    def get_levels(self):
+        return self.noise_levels
+        
+    def get_base_folder(self):
+        return f"{self.model_name}_expression_noise_v1"
+        
+    def get_feature_files(self, noise_level):
+        """Get feature files for a given noise level"""
+        base_path = f"{self.get_base_folder()}/noise_{noise_level}"
+        
+        feature_files = [
+            {
+                "path": f"{base_path}/noisy_features.pkl",
+                "label": f"noisy_features_{noise_level}"
+            },
+            {
+                "path": f"{base_path}/dynamic_features.pkl", 
+                "label": f"dynamic_features_{noise_level}"
+            },
+            {
+                "path": f"{base_path}/dynamic_features_no_outcome.pkl",
+                "label": f"dynamic_features_no_outcome_{noise_level}"
+            },
+            {
+                "path": f"{base_path}/last_time_points.pkl",
+                "label": f"last_time_points_{noise_level}"
+            },
+            {
+                "path": f"{base_path}/last_time_points_no_outcome.pkl",
+                "label": f"last_time_points_no_outcome_{noise_level}"
+            }
+        ]
+        
+        # Also include original features for comparison at noise_level=0
+        if noise_level == 0:
+            feature_files.append({
+                "path": f"{base_path}/original_features.pkl",
+                "label": "original_features_0"
+            })
+            
+        return feature_files
+        
+    def get_target_files(self, noise_level):
+        """Get target files for a given noise level"""
+        base_path = f"{self.get_base_folder()}/noise_{noise_level}"
+        
+        # For expression noise, we have both original_targets and targets
+        # Based on user requirements, use original_targets
+        return [
+            {
+                "path": f"{base_path}/original_targets.pkl",
+                "label": "original_targets"
+            }
+        ]
 
 
 def apply_expression_noise(feature_data, noise_level, seed):
@@ -419,8 +492,70 @@ def load_model_objects(model_name, s3_manager):
     return model_spec, model_builder, model_tuner
 
 
+def generate_csv_task_list():
+    """
+    Generate CSV task list for expression noise experiments.
+    
+    This function provides a command-line interface for generating
+    CSV task lists without running the full data generation pipeline.
+    """
+    parser = argparse.ArgumentParser(
+        description="Generate CSV task list for expression-noise-v1 experiments"
+    )
+    parser.add_argument(
+        "--output", "-o", 
+        required=True,
+        help="Output CSV file path"
+    )
+    parser.add_argument(
+        "--model", 
+        default="sy_simple",
+        help="Model name (default: sy_simple)"
+    )
+    parser.add_argument(
+        "--verify", 
+        action="store_true",
+        help="Verify files exist in S3 before adding to list"
+    )
+    parser.add_argument(
+        "--summary",
+        action="store_true",
+        help="Print summary of generated task list"
+    )
+    
+    args = parser.parse_args()
+    
+    logger.info("🚀 Generating CSV task list for expression-noise-v1")
+    
+    # Create task generator
+    generator = ExpressionNoiseTaskGenerator(model_name=args.model)
+    
+    # Initialize S3 manager if verification is requested
+    s3_manager = None
+    if args.verify:
+        s3_manager = S3ConfigManager()
+        logger.info("File verification enabled - checking S3 file existence")
+    
+    # Generate task list
+    task_df = generator.generate_task_list(
+        output_csv=args.output,
+        verify_exists=args.verify,
+        s3_manager=s3_manager
+    )
+    
+    if args.summary:
+        print_task_summary(task_df)
+    
+    logger.info(f"✅ CSV generation complete: {args.output}")
+
+
 def main():
     """Main execution function"""
+    # Check if CSV generation mode is requested
+    if len(sys.argv) > 1 and sys.argv[1] in ['--output', '-o', '--generate-csv']:
+        generate_csv_task_list()
+        return
+    
     logger.info("🚀 Starting Complete Expression Noise Data Generation")
     
     # Send start notification
@@ -525,4 +660,9 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    # Check command line arguments to determine mode
+    if len(sys.argv) > 1:
+        main()
+    else:
+        # Default: run data generation with default parameters
+        main()

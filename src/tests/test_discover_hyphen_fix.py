@@ -1,10 +1,13 @@
 """
-Test to verify the hyphen/underscore fix in discover_task_lists() and filter_tasks_by_experiment() functions.
+Test to verify the hyphen/underscore fix in discover_task_lists() function after refactoring.
 
 This test validates that the ML batch runner can handle:
 - CSV with hyphens in experiment_type (e.g., "expression-noise-v1")
 - Configuration with underscores (e.g., "expression_noise_v1")
 - Folder names with underscores (e.g., "sy_simple_expression_noise_v1")
+
+Note: After refactoring Option B, filter_tasks_by_experiment() function has been removed
+since CSV files are already filtered by experiment type (each CSV contains tasks for specific experiment).
 """
 
 import sys
@@ -34,7 +37,6 @@ spec.loader.exec_module(ml_batch_module)
 
 # Get the functions we want to test
 discover_task_lists = ml_batch_module.discover_task_lists
-filter_tasks_by_experiment = ml_batch_module.filter_tasks_by_experiment
 validate_csv_structure = ml_batch_module.validate_csv_structure
 
 
@@ -107,45 +109,6 @@ def test_discover_task_lists_hyphen_fix():
     return True
 
 
-def test_filter_tasks_by_experiment_hyphen_fix():
-    """Test that filter_tasks_by_experiment() handles hyphen/underscore mismatch"""
-    print("🧪 Testing filter_tasks_by_experiment() hyphen fix...")
-    
-    # Create DataFrame with hyphens in experiment_type
-    df = pd.DataFrame({
-        "feature_data": ["f1.pkl", "f2.pkl", "f3.pkl", "f4.pkl"],
-        "feature_data_label": ["f1", "f2", "f3", "f4"],
-        "target_data": ["t1.pkl", "t2.pkl", "t3.pkl", "t4.pkl"],
-        "target_data_label": ["t1", "t2", "t3", "t4"],
-        "experiment_type": ["expression-noise-v1", "parameter-distortion-v2", 
-                          "expression-noise-v1", "response-noise-v1"],  # HYPHENS
-        "level": [0, 1.1, 0.1, 0.05],
-        "model_name": ["sy_simple", "sy_simple", "sy_simple", "sy_simple"]
-    })
-    
-    # Test 1: Filter with underscores in configuration
-    experiment_types = ["expression_noise_v1"]  # UNDERSCORES
-    filtered_df = filter_tasks_by_experiment(df, experiment_types)
-    
-    assert len(filtered_df) == 2, f"Should find 2 expression-noise-v1 tasks, got {len(filtered_df)}"
-    assert all(filtered_df["experiment_type"] == "expression-noise-v1")
-    
-    # Test 2: Filter with hyphens in configuration (also should work)
-    experiment_types = ["expression-noise-v1"]  # HYPHENS
-    filtered_df = filter_tasks_by_experiment(df, experiment_types)
-    
-    assert len(filtered_df) == 2, f"Should find 2 expression-noise-v1 tasks, got {len(filtered_df)}"
-    
-    # Test 3: Filter with multiple experiment types (mix of hyphens and underscores)
-    experiment_types = ["expression_noise_v1", "parameter-distortion-v2"]  # Mixed
-    filtered_df = filter_tasks_by_experiment(df, experiment_types)
-    
-    assert len(filtered_df) == 3, f"Should find 3 tasks, got {len(filtered_df)}"
-    exp_types = set(filtered_df["experiment_type"])
-    assert exp_types == {"expression-noise-v1", "parameter-distortion-v2"}
-    
-    print("✅ filter_tasks_by_experiment() hyphen fix test passed")
-    return True
 
 
 def test_end_to_end_workflow():
@@ -202,17 +165,33 @@ def test_end_to_end_workflow():
         # Mock S3 manager for discover_task_lists
         s3_manager = Mock()
         s3_manager.save_result_path = "test/path"
-        s3_manager.load_data_from_path = Mock(return_value=loaded_df)
+        
+        # Create separate CSVs for each experiment type (more realistic)
+        # CSV for expression-noise-v1 should only contain expression-noise-v1 tasks
+        expr_df = loaded_df[loaded_df["experiment_type"].isin(["expression-noise-v1"])].copy()
+        param_df = loaded_df[loaded_df["experiment_type"].isin(["parameter-distortion-v2"])].copy()
+        
+        # Mock load_data_from_path to return different CSVs based on path
+        def side_effect(path, data_format):
+            if "sy_simple_expression_noise_v1" in path:
+                return expr_df
+            elif "sy_simple_parameter_distortion_v2" in path:
+                return param_df
+            else:
+                raise Exception(f"Unexpected path: {path}")
+        
+        s3_manager.load_data_from_path = Mock(side_effect=side_effect)
         
         # Test discover_task_lists
         discovered_df = discover_task_lists(experiment_types, model_names, s3_manager)
         
         # Should find 3 tasks (2 expression-noise-v1 + 1 parameter-distortion-v2)
+        # Since each CSV only contains tasks for its specific experiment type
         assert len(discovered_df) == 3, f"Should find 3 tasks, got {len(discovered_df)}"
         
-        # Test filter_tasks_by_experiment on discovered data
-        filtered_df = filter_tasks_by_experiment(discovered_df, experiment_types)
-        assert len(filtered_df) == 3, "Filtering should preserve all tasks"
+        # No need to filter by experiment_type - CSV already contains tasks for specific experiments
+        # Discovered tasks should match our configuration
+        # Verified by the assertion above
         
         # Verify the workflow handles the mismatch correctly
         print(f"  CSV has experiment_types: {loaded_df['experiment_type'].unique()}")
@@ -226,48 +205,6 @@ def test_end_to_end_workflow():
         shutil.rmtree(test_dir)
 
 
-def test_edge_cases():
-    """Test edge cases for hyphen/underscore handling"""
-    print("🧪 Testing edge cases...")
-    
-    # Edge case 1: Mixed hyphen/underscore in CSV
-    df_mixed = pd.DataFrame({
-        "feature_data": ["f1.pkl", "f2.pkl", "f3.pkl"],
-        "feature_data_label": ["f1", "f2", "f3"],
-        "target_data": ["t1.pkl", "t2.pkl", "t3.pkl"],
-        "target_data_label": ["t1", "t2", "t3"],
-        "experiment_type": ["expression-noise-v1", "expression_noise_v1", "expression-noise-v1"],  # Mixed!
-        "level": [0, 0.1, 0.2],
-        "model_name": ["sy_simple", "sy_simple", "sy_simple"]
-    })
-    
-    # Should handle all variations
-    experiment_types = ["expression_noise_v1"]
-    filtered_df = filter_tasks_by_experiment(df_mixed, experiment_types)
-    
-    # Should find all 3 (since we normalize for comparison)
-    assert len(filtered_df) == 3, f"Should find all 3 tasks regardless of hyphen/underscore, got {len(filtered_df)}"
-    
-    # Edge case 2: Empty DataFrame
-    df_empty = pd.DataFrame(columns=[
-        "feature_data", "feature_data_label", "target_data", 
-        "target_data_label", "experiment_type", "level", "model_name"
-    ])
-    
-    filtered_df = filter_tasks_by_experiment(df_empty, ["expression_noise_v1"])
-    assert len(filtered_df) == 0, "Empty DataFrame should remain empty"
-    
-    # Edge case 3: None experiment_types
-    df = pd.DataFrame({
-        "experiment_type": ["expression-noise-v1", "parameter-distortion-v2"],
-        "model_name": ["sy_simple", "sy_simple"]
-    })
-    
-    filtered_df = filter_tasks_by_experiment(df, None)
-    assert len(filtered_df) == 2, "None experiment_types should return all tasks"
-    
-    print("✅ Edge cases test passed")
-    return True
 
 
 def test_folder_name_generation():
@@ -296,15 +233,13 @@ def test_folder_name_generation():
 def main():
     """Run all tests"""
     print("="*70)
-    print("🔬 Testing Hyphen/Underscore Fix for ML Batch Runner")
+    print("🔬 Testing Hyphen/Underscore Fix for ML Batch Runner (After Refactor)")
     print("="*70)
     
     tests = [
         test_hyphen_underscore_conversion_logic,
         test_discover_task_lists_hyphen_fix,
-        test_filter_tasks_by_experiment_hyphen_fix,
         test_end_to_end_workflow,
-        test_edge_cases,
         test_folder_name_generation,
     ]
     
@@ -332,11 +267,15 @@ def main():
         print("🎉 All hyphen/underscore fix tests passed!")
         print("\n📋 Summary of fixes validated:")
         print("1. ✅ discover_task_lists() converts hyphens to underscores for folder paths")
-        print("2. ✅ discover_task_lists() handles hyphen/underscore mismatch when filtering CSV rows")
-        print("3. ✅ filter_tasks_by_experiment() normalizes both CSV and config values for comparison")
-        print("4. ✅ Folder names are generated with underscores (matching data-eng scripts)")
-        print("5. ✅ End-to-end workflow handles the mismatch transparently")
-        print("6. ✅ Edge cases are handled correctly")
+        print("2. ✅ discover_task_lists() correctly discovers CSV files for specified experiments")
+        print("3. ✅ Folder names are generated with underscores (matching data-eng scripts)")
+        print("4. ✅ End-to-end workflow handles the mismatch transparently")
+        
+        print("\n💡 After Option B refactoring:")
+        print("   - filter_tasks_by_experiment() function removed - redundant filtering eliminated")
+        print("   - CSV files already contain tasks for specific experiment types")
+        print("   - discover_task_lists() returns unfiltered CSV content")
+        print("   - No duplicate assertion checks needed")
         
         print("\n💡 The fix ensures compatibility between:")
         print("   - Data-eng scripts: Write 'expression-noise-v1' (hyphens) to CSV")

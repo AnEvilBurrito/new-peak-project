@@ -142,19 +142,13 @@ def discover_task_lists(experiment_types, model_names, s3_manager):
                 logger.info(f"Looking for task list: {csv_path}")
                 task_df = s3_manager.load_data_from_path(csv_path, data_format="csv")
                 
-                # Filter to only include tasks for this experiment type and model
-                # CSV has experiment_type with hyphens (e.g., "expression-noise-v1")
-                # So we need to handle both hyphen and underscore formats
-                filtered_df = task_df[
-                    (task_df["experiment_type"].str.replace('-', '_') == exp_type.replace('-', '_')) & 
-                    (task_df["model_name"] == model_name)
-                ]
-                
-                if not filtered_df.empty:
-                    all_tasks.append(filtered_df)
-                    logger.info(f"Found {len(filtered_df)} tasks for {model_name}/{exp_type}")
+                # The CSV already contains tasks for this specific experiment type (folder name matches)
+                # No need to filter by experiment_type column - all rows are valid
+                if not task_df.empty:
+                    all_tasks.append(task_df)
+                    logger.info(f"Found {len(task_df)} tasks for {model_name}/{exp_type}")
                 else:
-                    logger.warning(f"No matching tasks found in CSV for {model_name}/{exp_type}")
+                    logger.warning(f"CSV is empty for {model_name}/{exp_type}")
                     
             except Exception as e:
                 logger.warning(f"Task list not found or error loading: {csv_path} - {str(e)[:100]}")
@@ -208,29 +202,6 @@ def filter_tasks_by_model(df: pd.DataFrame, model_names: Optional[List[str]]) ->
     return filtered_df
 
 
-def filter_tasks_by_experiment(df: pd.DataFrame, experiment_types: Optional[List[str]]) -> pd.DataFrame:
-    """Filter tasks by experiment type"""
-    if experiment_types is None:
-        return df
-    
-    # Handle both hyphen and underscore formats for experiment type matching
-    # CSV has hyphens (e.g., "expression-noise-v1"), configuration may have underscores
-    normalized_experiment_types = [exp_type.replace('-', '_') for exp_type in experiment_types]
-    filtered_df = df[df["experiment_type"].str.replace('-', '_').isin(normalized_experiment_types)].copy()
-    logger.info(f"Filtered to {len(filtered_df)} tasks from {len(df)} total")
-    logger.info(f"Experiment types: {experiment_types}")
-    
-    return filtered_df
-
-
-def group_tasks_by_experiment(df: pd.DataFrame) -> Dict[str, pd.DataFrame]:
-    """Group tasks by experiment type"""
-    grouped = {}
-    for exp_type, group_df in df.groupby("experiment_type"):
-        grouped[exp_type] = group_df.reset_index(drop=True)
-        logger.info(f"Experiment '{exp_type}': {len(group_df)} tasks")
-    
-    return grouped
 
 
 def run_batch_evaluation_for_experiment(
@@ -528,14 +499,12 @@ def main():
                 logger.warning(f"No tasks found for model {model_name}, skipping")
                 continue
             
-            # Filter by experiment types
-            filtered_df = filter_tasks_by_experiment(model_tasks, experiment_types)
-            if len(filtered_df) == 0:
-                logger.warning(f"No tasks match experiment criteria for model {model_name}, skipping")
-                continue
-            
-            # Group by experiment type
-            grouped_tasks = group_tasks_by_experiment(filtered_df)
+            # No need to filter by experiment_type - CSV already contains tasks for specific experiment
+            # Group tasks by experiment type (each CSV already grouped by experiment)
+            grouped_tasks = {}
+            for exp_type, group_df in model_tasks.groupby("experiment_type"):
+                grouped_tasks[exp_type] = group_df.reset_index(drop=True)
+                logger.info(f"Experiment '{exp_type}': {len(group_df)} tasks")
             
             # Process each experiment type for this model
             model_results = {}

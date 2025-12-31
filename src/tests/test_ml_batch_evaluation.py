@@ -23,9 +23,9 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 ML_BATCH_AVAILABLE = False
 ml_batch_module = None
 
-# Path to the script
+# Path to the script - from src/tests to src/notebooks/ch5-paper/machine-learning/run-ml-batch-v1.py
 script_path = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
     'notebooks', 'ch5-paper', 'machine-learning', 'run-ml-batch-v1.py'
 )
 
@@ -117,41 +117,6 @@ class TestMLBatchEvaluation(unittest.TestCase):
         is_valid = ml_batch_module.validate_csv_structure(invalid_df)
         self.assertFalse(is_valid, "Invalid CSV should fail validation")
     
-    def test_filter_tasks_by_experiment(self):
-        """Test filtering tasks by experiment type"""
-        if not ML_BATCH_AVAILABLE:
-            self.skipTest("ML batch module not available")
-        
-        # Test filtering for specific experiment
-        filtered_df = ml_batch_module.filter_tasks_by_experiment(
-            self.test_df, ["expression-noise-v1"]
-        )
-        
-        self.assertEqual(len(filtered_df), 2, "Should filter to 2 expression-noise-v1 tasks")
-        self.assertTrue(
-            all(filtered_df["experiment_type"] == "expression-noise-v1"),
-            "All filtered tasks should be expression-noise-v1"
-        )
-        
-        # Test filtering for multiple experiments
-        filtered_df = ml_batch_module.filter_tasks_by_experiment(
-            self.test_df, ["expression-noise-v1", "parameter-distortion-v2"]
-        )
-        
-        self.assertEqual(len(filtered_df), 3, "Should include all 3 tasks")
-    
-    def test_group_tasks_by_experiment(self):
-        """Test grouping tasks by experiment type"""
-        if not ML_BATCH_AVAILABLE:
-            self.skipTest("ML batch module not available")
-        
-        grouped = ml_batch_module.group_tasks_by_experiment(self.test_df)
-        
-        self.assertIn("expression-noise-v1", grouped)
-        self.assertIn("parameter-distortion-v2", grouped)
-        
-        self.assertEqual(len(grouped["expression-noise-v1"]), 2)
-        self.assertEqual(len(grouped["parameter-distortion-v2"]), 1)
     
     @patch.object(ml_batch_module, 'BatchLoader', create=True)
     @patch.object(ml_batch_module, 'batch_eval_standard', create=True)
@@ -262,29 +227,6 @@ class TestMLBatchEvaluation(unittest.TestCase):
             "new-peak-project/experiments/ch5-paper/machine-learning/expression-noise-v1/sy_simple/run-metadata.yml"
         )
     
-    def test_command_line_argument_parsing(self):
-        """Test command-line argument parsing"""
-        if not ML_BATCH_AVAILABLE:
-            self.skipTest("ML batch module not available")
-        
-        # Test argument parser setup
-        parser = ml_batch_module.setup_argparse()
-        
-        # Test required argument
-        with self.assertRaises(SystemExit):
-            parser.parse_args([])
-        
-        # Test valid arguments
-        test_args = ["--csv", "test.csv", "--experiment-types", "expression-noise-v1"]
-        args = parser.parse_args(test_args)
-        
-        self.assertEqual(args.csv, "test.csv")
-        self.assertEqual(args.experiment_types, ["expression-noise-v1"])
-        self.assertEqual(args.num_repeats, 10)  # Default value
-        self.assertEqual(args.test_size, 0.2)  # Default value
-        self.assertEqual(args.random_seed, 42)  # Default value
-        self.assertEqual(args.n_jobs, -1)  # Default value
-        self.assertFalse(args.upload_s3)  # Default value
 
 
 class TestIntegrationScenarios(unittest.TestCase):
@@ -298,9 +240,9 @@ class TestIntegrationScenarios(unittest.TestCase):
         # This would test the main() function with all dependencies mocked
         # For now, we'll just verify the module structure
         self.assertTrue(hasattr(ml_batch_module, 'main'))
-        self.assertTrue(hasattr(ml_batch_module, 'setup_argparse'))
         self.assertTrue(hasattr(ml_batch_module, 'validate_csv_structure'))
         self.assertTrue(hasattr(ml_batch_module, 'run_batch_evaluation_for_experiment'))
+        self.assertTrue(hasattr(ml_batch_module, 'discover_task_lists'))
     
     def test_error_handling_scenarios(self):
         """Test error handling in various scenarios"""

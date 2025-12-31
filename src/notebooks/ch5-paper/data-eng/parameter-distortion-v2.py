@@ -56,6 +56,7 @@ SIMULATION_PARAMS = {'start': 0, 'end': 10000, 'points': 101}
 OUTCOME_VAR = "Oa"
 UPLOAD_S3 = True
 SEND_NOTIFICATIONS = True
+GENERATE_ML_TASK_LIST = True
 # ===== END CONFIGURATION =====
 
 
@@ -541,6 +542,10 @@ def generate_csv_task_list():
     This function provides a configuration-based interface for generating
     CSV task lists without running the full data generation pipeline.
     """
+    if not GENERATE_ML_TASK_LIST:
+        logger.info("Skipping ML task list generation (GENERATE_ML_TASK_LIST=False)")
+        return pd.DataFrame()
+    
     logger.info("🚀 Generating CSV task list for parameter-distortion-v2")
     
     # Process model configuration
@@ -548,14 +553,14 @@ def generate_csv_task_list():
     
     all_task_rows = []
     
+    # Initialize S3 manager if UPLOAD_S3 is True
+    s3_manager = S3ConfigManager() if UPLOAD_S3 else None
+    
     for model_name in model_names:
         logger.info(f"Generating tasks for model: {model_name}")
         
         # Create task generator
         generator = ParameterDistortionTaskGenerator(model_name=model_name)
-        
-        # Initialize S3 manager if verification is needed
-        s3_manager = None
         
         # Generate task list for this model
         task_rows = []
@@ -581,10 +586,21 @@ def generate_csv_task_list():
     
     # Save combined task list
     if all_task_rows:
-        output_csv = f"parameter_distortion_tasks_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+        output_csv = "task_list.csv"
         task_df = pd.DataFrame(all_task_rows)
+        
+        # Save locally
         task_df.to_csv(output_csv, index=False)
         logger.info(f"✅ Generated task list with {len(task_df)} rows to: {output_csv}")
+        
+        # Upload to S3 if enabled
+        if UPLOAD_S3 and s3_manager:
+            folder_name = generator.get_base_folder() if 'generator' in locals() else f"{model_names[0]}_parameter_distortion_v2"
+            gen_path = s3_manager.save_result_path
+            s3_csv_path = f"{gen_path}/data/{folder_name}/{output_csv}"
+            
+            s3_manager.save_data_from_path(s3_csv_path, task_df, data_format="csv")
+            logger.info(f"✅ Uploaded CSV to S3: {s3_csv_path}")
         
         if len(model_names) > 1:
             print_task_summary(task_df)
@@ -701,6 +717,13 @@ def main():
             successful_models.append(model_name)
         else:
             failed_models.append(model_name)
+    
+    # Generate CSV task list if enabled
+    if GENERATE_ML_TASK_LIST:
+        logger.info("Generating ML task list CSV...")
+        task_df = generate_csv_task_list()
+        if not task_df.empty:
+            logger.info(f"✅ Generated task list with {len(task_df)} rows")
     
     # Calculate execution time
     end_time = datetime.now()

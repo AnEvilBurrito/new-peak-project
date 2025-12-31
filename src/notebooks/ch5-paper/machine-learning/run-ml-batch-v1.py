@@ -59,6 +59,9 @@ N_JOBS = -1          # Number of parallel jobs (-1 for all cores)
 UPLOAD_S3 = True     # Upload results to S3 (True/False)
 SKIP_FAILED = True   # Skip failed tasks and continue processing
 
+# Notification configuration (matching data-eng scripts)
+SEND_NOTIFICATIONS = True   # Send ntfy notifications (True/False)
+
 # ===== END CONFIGURATION =====
 
 # Add src to path for imports
@@ -67,6 +70,7 @@ src_dir = os.path.join(current_dir, "../../..")
 sys.path.insert(0, src_dir)
 
 from models.utils.s3_config_manager import S3ConfigManager
+from scripts.ntfy_notifier import notify_start, notify_success, notify_failure
 
 # Import BatchLoader from the correct location - note the hyphen in the directory name
 # The file is at: src/notebooks/ch5-paper/data-eng/create-ml-loader-v1.py
@@ -409,6 +413,17 @@ def main():
     # Normalize model names to list format
     model_names_normalized = normalize_model_names(model_names)
     
+    # Send start notification if enabled
+    if SEND_NOTIFICATIONS:
+        script_name = 'ml-batch-eval'
+        extra_info = {
+            'CSV': csv_path or 'Auto-discovery',
+            'Experiment types': experiment_types,
+            'Models': model_names_normalized,
+            'Upload S3': upload_s3
+        }
+        notify_start(script_name, **extra_info)
+    
     logger.info("🚀 Starting ML Batch Evaluation Runner (Configuration Version)")
     logger.info(f"CSV: {csv_path}")
     logger.info(f"Experiment types: {experiment_types}")
@@ -418,6 +433,8 @@ def main():
     logger.info(f"Model names: {model_names_normalized or 'Auto-detect from CSV'}")
     logger.info(f"Num repeats: {num_repeats}, Test size: {test_size}")
     logger.info(f"Random seed: {random_seed}, Parallel jobs: {n_jobs}")
+    if SEND_NOTIFICATIONS:
+        logger.info("🔔 Notifications enabled")
     
     start_time = datetime.now()
     overall_results = {}
@@ -613,9 +630,20 @@ def main():
         
         logger.info("🎉 ML Batch Evaluation completed successfully!")
         
+        # Send success notification if enabled
+        if SEND_NOTIFICATIONS:
+            processed_count = len(overall_results)
+            notify_success('ml-batch-eval', duration, processed_count=processed_count)
+        
     except Exception as e:
         logger.error(f"❌ ML Batch Evaluation failed: {e}")
         logger.error(traceback.format_exc())
+        
+        # Send failure notification if enabled
+        if SEND_NOTIFICATIONS:
+            duration = (datetime.now() - start_time).total_seconds()
+            notify_failure('ml-batch-eval', e, duration_seconds=duration)
+        
         sys.exit(1)
 
 

@@ -438,6 +438,32 @@ def generate_complete_dataset_for_distortion_level(
         selected_species=states_no_outcome.keys()
     )
     
+    # Clip extreme values in dynamic features to prevent float32 overflow in ML
+    # Values exceeding ±1e9 can cause sklearn's float32 conversion to fail
+    clipping_threshold = 1e9
+    logger.info(f"Clipping dynamic features to ±{clipping_threshold:.1e} to prevent float32 overflow")
+    
+    def clip_dataframe(df, threshold):
+        """Clip DataFrame values to prevent extreme values"""
+        df_clipped = df.copy()
+        for col in df.columns:
+            if pd.api.types.is_numeric_dtype(df[col]):
+                # Count extreme values before clipping
+                extreme_pos = (df[col] > threshold).sum()
+                extreme_neg = (df[col] < -threshold).sum()
+                if extreme_pos > 0 or extreme_neg > 0:
+                    logger.debug(f"  {col}: clipping {extreme_pos} > {threshold:.1e}, {extreme_neg} < -{threshold:.1e}")
+                # Clip values
+                df_clipped[col] = df_clipped[col].clip(lower=-threshold, upper=threshold)
+        return df_clipped
+    
+    dynamic_features = clip_dataframe(dynamic_features, clipping_threshold)
+    dynamic_features_no_outcome = clip_dataframe(dynamic_features_no_outcome, clipping_threshold)
+    
+    # Also consider clipping last_time_points (though they're usually smaller)
+    last_time_points = clip_dataframe(last_time_points, clipping_threshold)
+    last_time_points_no_outcome = clip_dataframe(last_time_points_no_outcome, clipping_threshold)
+    
     return {
         'features': feature_data,
         'targets': target_data,

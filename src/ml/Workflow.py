@@ -11,13 +11,63 @@ from scipy.stats import pearsonr
 from tqdm import tqdm
 import pandas as pd
 import numpy as np
+from sklearn.base import BaseEstimator, TransformerMixin
 
-def build_pipeline(model, scale=False):
-    steps = [('imputer', SimpleImputer(strategy='mean'))]
+
+class ClippingTransformer(BaseEstimator, TransformerMixin):
+    """
+    Transformer that clips extreme values to prevent float32 overflow in sklearn.
+    Useful for datasets with extreme values from parameter distortion experiments.
+    """
+    def __init__(self, threshold=1e9):
+        self.threshold = threshold
+        
+    def fit(self, X, y=None):
+        # No fitting needed
+        return self
+        
+    def transform(self, X):
+        if isinstance(X, pd.DataFrame):
+            X_clipped = X.copy()
+            for col in X.columns:
+                if pd.api.types.is_numeric_dtype(X[col]):
+                    X_clipped[col] = X_clipped[col].clip(lower=-self.threshold, upper=self.threshold)
+            return X_clipped
+        else:
+            # numpy array
+            return np.clip(X, -self.threshold, self.threshold)
+            
+    def fit_transform(self, X, y=None):
+        return self.fit(X, y).transform(X)
+
+
+def build_pipeline(model, scale=False, clip_threshold=None):
+    """
+    Build a scikit-learn pipeline with optional clipping, imputation, scaling, and model.
+    
+    Args:
+        model: The estimator to use as the final step
+        scale: Whether to include StandardScaler
+        clip_threshold: If provided, clip values to ±threshold to prevent float32 overflow
+    """
+    steps = []
+    
+    # Add clipping if threshold provided
+    if clip_threshold is not None:
+        steps.append(('clipper', ClippingTransformer(threshold=clip_threshold)))
+    
+    steps.append(('imputer', SimpleImputer(strategy='mean')))
+    
     if scale:
         steps.append(('scaler', StandardScaler()))
+    
     steps.append(('model', model))
     return Pipeline(steps)
+
+
+def build_pipeline_with_clipping(model, scale=False, threshold=1e9):
+    """Convenience function for building pipeline with clipping"""
+    return build_pipeline(model, scale=scale, clip_threshold=threshold)
 
 
 
@@ -119,7 +169,8 @@ def batch_eval_standard(feature_data_list, feature_data_names, target_data, targ
                      num_repeats=10,
                      test_size=0.2,
                      o_random_seed=42, 
-                     n_jobs=-1):
+                     n_jobs=-1,
+                     clip_threshold=1e9):
     """
     Evaluate multiple standard models on multiple feature datasets against one target dataset.
     
@@ -132,18 +183,19 @@ def batch_eval_standard(feature_data_list, feature_data_names, target_data, targ
     - test_size: Proportion of data to use for testing (default: 0.2).
     - o_random_seed: Random seed for reproducibility (default: 42).
     - n_jobs: Number of parallel jobs to run (-1 for all available cores, 1 for serial).
+    - clip_threshold: Clip feature values to ±threshold to prevent float32 overflow (default: 1e9).
     
     Returns:
     - DataFrame containing evaluation metrics for each model and feature dataset.
     """
     
-    # Define the standard set of models
+    # Define the standard set of models with clipping to prevent float32 overflow
     all_models = [
-        build_pipeline(LinearRegression()),
-        build_pipeline(RandomForestRegressor(n_estimators=100, random_state=o_random_seed)),
-        build_pipeline(GradientBoostingRegressor(n_estimators=100, random_state=o_random_seed)),
-        build_pipeline(SVR(max_iter=10000), scale=True),
-        build_pipeline(MLPRegressor(hidden_layer_sizes=(20,), max_iter=10000, random_state=o_random_seed), scale=True)
+        build_pipeline(LinearRegression(), clip_threshold=clip_threshold),
+        build_pipeline(RandomForestRegressor(n_estimators=100, random_state=o_random_seed), clip_threshold=clip_threshold),
+        build_pipeline(GradientBoostingRegressor(n_estimators=100, random_state=o_random_seed), clip_threshold=clip_threshold),
+        build_pipeline(SVR(max_iter=10000), scale=True, clip_threshold=clip_threshold),
+        build_pipeline(MLPRegressor(hidden_layer_sizes=(20,), max_iter=10000, random_state=o_random_seed), scale=True, clip_threshold=clip_threshold)
     ]
 
     all_models_desc = ['Linear Regression', 'Random Forest', 'Gradient Boosting', 'Support Vector Machine', 'Neural Network']

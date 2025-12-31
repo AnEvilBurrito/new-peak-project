@@ -38,7 +38,7 @@ CSV_PATH = None  # Set to None for auto-discovery, or provide custom path: "path
 # When CSV_PATH is provided, the script will load the specified CSV file
 
 # Experiment selection
-EXPERIMENT_TYPES = ["expression-noise-v1"]  # List of experiment types to process
+EXPERIMENT_TYPES = ["expression_noise_v1"]  # List of experiment types to process
 # EXPERIMENT_TYPES = ["expression-noise-v1", "parameter-distortion-v2"]  # Multiple experiments
 # EXPERIMENT_TYPES = None  # Process ALL experiments in CSV
 
@@ -132,8 +132,10 @@ def discover_task_lists(experiment_types, model_names, s3_manager):
     for model_name in model_names:
         for exp_type in experiment_types:
             # Construct expected CSV path based on pattern from data-eng scripts
-            # Pattern: {model_name}_{experiment_type} (e.g., "sy_simple_expression_noise_v1")
-            folder_name = f"{model_name}_{exp_type}"
+            # Data-eng scripts create folders with underscores: {model_name}_{experiment_type_with_underscores}
+            # e.g., "sy_simple_expression_noise_v1" (underscores, not hyphens)
+            # So we need to convert hyphens to underscores for folder names
+            folder_name = f"{model_name}_{exp_type.replace('-', '_')}"
             csv_path = f"{s3_manager.save_result_path}/data/{folder_name}/task_list.csv"
             
             try:
@@ -141,8 +143,10 @@ def discover_task_lists(experiment_types, model_names, s3_manager):
                 task_df = s3_manager.load_data_from_path(csv_path, data_format="csv")
                 
                 # Filter to only include tasks for this experiment type and model
+                # CSV has experiment_type with hyphens (e.g., "expression-noise-v1")
+                # So we need to handle both hyphen and underscore formats
                 filtered_df = task_df[
-                    (task_df["experiment_type"] == exp_type) & 
+                    (task_df["experiment_type"].str.replace('-', '_') == exp_type.replace('-', '_')) & 
                     (task_df["model_name"] == model_name)
                 ]
                 
@@ -209,7 +213,10 @@ def filter_tasks_by_experiment(df: pd.DataFrame, experiment_types: Optional[List
     if experiment_types is None:
         return df
     
-    filtered_df = df[df["experiment_type"].isin(experiment_types)].copy()
+    # Handle both hyphen and underscore formats for experiment type matching
+    # CSV has hyphens (e.g., "expression-noise-v1"), configuration may have underscores
+    normalized_experiment_types = [exp_type.replace('-', '_') for exp_type in experiment_types]
+    filtered_df = df[df["experiment_type"].str.replace('-', '_').isin(normalized_experiment_types)].copy()
     logger.info(f"Filtered to {len(filtered_df)} tasks from {len(df)} total")
     logger.info(f"Experiment types: {experiment_types}")
     

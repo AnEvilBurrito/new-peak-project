@@ -546,6 +546,11 @@ def generate_csv_task_list():
         logger.info("Skipping ML task list generation (GENERATE_ML_TASK_LIST=False)")
         return pd.DataFrame()
     
+    # Check if S3 upload is enabled
+    if not UPLOAD_S3:
+        logger.info("Skipping ML task list generation (UPLOAD_S3=False)")
+        return pd.DataFrame()
+    
     logger.info("🚀 Generating CSV task list for parameter-distortion-v2")
     
     # Process model configuration
@@ -586,26 +591,25 @@ def generate_csv_task_list():
     
     # Save combined task list
     if all_task_rows:
-        output_csv = "task_list.csv"
         task_df = pd.DataFrame(all_task_rows)
-        
-        # Save locally
-        task_df.to_csv(output_csv, index=False)
-        logger.info(f"✅ Generated task list with {len(task_df)} rows to: {output_csv}")
         
         # Upload to S3 if enabled
         if UPLOAD_S3 and s3_manager:
+            output_csv = "task_list.csv"
             folder_name = generator.get_base_folder() if 'generator' in locals() else f"{model_names[0]}_parameter_distortion_v2"
             gen_path = s3_manager.save_result_path
             s3_csv_path = f"{gen_path}/data/{folder_name}/{output_csv}"
             
             s3_manager.save_data_from_path(s3_csv_path, task_df, data_format="csv")
             logger.info(f"✅ Uploaded CSV to S3: {s3_csv_path}")
-        
-        if len(model_names) > 1:
-            print_task_summary(task_df)
-        
-        return task_df
+            
+            if len(model_names) > 1:
+                print_task_summary(task_df)
+            
+            return task_df
+        else:
+            logger.info("Skipping CSV save (UPLOAD_S3=False or no S3 manager)")
+            return pd.DataFrame()
     else:
         logger.warning("No tasks generated")
         return pd.DataFrame()

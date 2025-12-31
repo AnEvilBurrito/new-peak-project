@@ -1,5 +1,5 @@
 """
-ML Batch Loader Generator (v1)
+ML Batch Loader Generator - Configuration Version
 
 Creates a CSV task list for ML batch evaluation based on data generation patterns.
 The CSV can be loaded by a BatchLoader class that interfaces with ml.Workflow.batch_eval functions.
@@ -8,12 +8,15 @@ Supports multiple experiment types:
 - expression-noise-v1.py
 - parameter-distortion-v2.py  
 - response-noise-v1.py
+
+CONFIGURATION-BASED VERSION:
+For remote batch job execution where modifying script variables is more practical than CLI arguments.
+Supports single model (string) or multiple models (list) for multiplexing.
 """
 
 import sys
 import os
 import pandas as pd
-import argparse
 import yaml
 from pathlib import Path
 from typing import List, Dict, Tuple, Optional, Any
@@ -26,201 +29,81 @@ sys.path.insert(0, src_dir)
 
 from models.utils.s3_config_manager import S3ConfigManager
 
+# Import task generator classes from individual scripts using importlib to handle hyphens
+import importlib.util
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-class ExperimentPattern:
-    """Base class for experiment pattern definitions"""
+# ===== CONFIGURATION SECTION =====
+# MODIFY THESE VARIABLES FOR YOUR BATCH JOB
+MODEL_NAME = "sy_simple"  # Can be string: "sy_simple" or list: ["sy_simple", "model_v2"]
+EXPERIMENT_TYPES = ["expression-noise-v1", "parameter-distortion-v2", "response-noise-v1"]
+OUTPUT_CSV = "ml_batch_tasks.csv"
+VERIFY_EXISTS = True
+GENERATE_ONLY = False
+# ===== END CONFIGURATION =====
+
+
+def process_model_config(model_config):
+    """
+    Convert MODEL_NAME config to list of model names for processing.
     
-    def __init__(self, name: str, model_name: str = "sy_simple"):
-        self.name = name
-        self.model_name = model_name
-        
-    def get_feature_files(self, level: Any) -> List[Dict[str, str]]:
-        """Return list of feature file patterns for a given level"""
-        raise NotImplementedError
-        
-    def get_target_files(self, level: Any) -> List[Dict[str, str]]:
-        """Return list of target file patterns for a given level"""
-        raise NotImplementedError
-        
-    def get_levels(self) -> List[Any]:
-        """Return list of levels for this experiment"""
-        raise NotImplementedError
-        
-    def get_base_folder(self) -> str:
-        """Return base folder name for this experiment"""
-        raise NotImplementedError
-
-
-class ExpressionNoisePattern(ExperimentPattern):
-    """Pattern for expression-noise-v1.py datasets"""
+    Args:
+        model_config: Can be string (single model) or list (multiple models)
     
-    def __init__(self, model_name: str = "sy_simple"):
-        super().__init__("expression-noise-v1", model_name)
-        self.noise_levels = [0, 0.1, 0.2, 0.3, 0.5, 1.0]
-        
-    def get_levels(self) -> List[float]:
-        return self.noise_levels
-        
-    def get_base_folder(self) -> str:
-        return f"{self.model_name}_expression_noise_v1"
-        
-    def get_feature_files(self, noise_level: float) -> List[Dict[str, str]]:
-        """Get feature files for a given noise level"""
-        base_path = f"{self.get_base_folder()}/noise_{noise_level}"
-        
-        feature_files = [
-            {
-                "path": f"{base_path}/noisy_features.pkl",
-                "label": f"noisy_features_{noise_level}"
-            },
-            {
-                "path": f"{base_path}/dynamic_features.pkl", 
-                "label": f"dynamic_features_{noise_level}"
-            },
-            {
-                "path": f"{base_path}/dynamic_features_no_outcome.pkl",
-                "label": f"dynamic_features_no_outcome_{noise_level}"
-            },
-            {
-                "path": f"{base_path}/last_time_points.pkl",
-                "label": f"last_time_points_{noise_level}"
-            },
-            {
-                "path": f"{base_path}/last_time_points_no_outcome.pkl",
-                "label": f"last_time_points_no_outcome_{noise_level}"
-            }
-        ]
-        
-        # Also include original features for comparison at noise_level=0
-        if noise_level == 0:
-            feature_files.append({
-                "path": f"{base_path}/original_features.pkl",
-                "label": "original_features_0"
-            })
-            
-        return feature_files
-        
-    def get_target_files(self, noise_level: float) -> List[Dict[str, str]]:
-        """Get target files for a given noise level"""
-        base_path = f"{self.get_base_folder()}/noise_{noise_level}"
-        
-        # For expression noise, we have both original_targets and targets
-        # Based on user requirements, use original_targets
-        return [
-            {
-                "path": f"{base_path}/original_targets.pkl",
-                "label": "original_targets"
-            }
-        ]
+    Returns:
+        List of model names
+    """
+    if isinstance(model_config, str):
+        return [model_config]
+    elif isinstance(model_config, list):
+        return model_config
+    else:
+        raise ValueError(f"MODEL_NAME must be str or list, got {type(model_config)}")
 
 
-class ParameterDistortionPattern(ExperimentPattern):
-    """Pattern for parameter-distortion-v2.py datasets"""
+# Helper function to import from hyphenated filenames
+def import_from_hyphenated_file(filepath, class_name):
+    """Import a class from a Python file with hyphenated name"""
+    module_name = filepath.replace('-', '_').replace('.py', '')
+    file_dir = os.path.dirname(filepath)
     
-    def __init__(self, model_name: str = "sy_simple"):
-        super().__init__("parameter-distortion-v2", model_name)
-        self.distortion_factors = [0, 1.1, 1.3, 1.5, 2.0, 3.0]
-        
-    def get_levels(self) -> List[float]:
-        return self.distortion_factors
-        
-    def get_base_folder(self) -> str:
-        return f"{self.model_name}_parameter_distortion_v2"
-        
-    def get_feature_files(self, distortion_factor: float) -> List[Dict[str, str]]:
-        """Get feature files for a given distortion factor"""
-        base_path = f"{self.get_base_folder()}/distortion_{distortion_factor}"
-        
-        return [
-            {
-                "path": f"{base_path}/features.pkl",
-                "label": f"features_{distortion_factor}"
-            },
-            {
-                "path": f"{base_path}/dynamic_features.pkl",
-                "label": f"dynamic_features_{distortion_factor}"
-            },
-            {
-                "path": f"{base_path}/dynamic_features_no_outcome.pkl",
-                "label": f"dynamic_features_no_outcome_{distortion_factor}"
-            },
-            {
-                "path": f"{base_path}/last_time_points.pkl",
-                "label": f"last_time_points_{distortion_factor}"
-            },
-            {
-                "path": f"{base_path}/last_time_points_no_outcome.pkl",
-                "label": f"last_time_points_no_outcome_{distortion_factor}"
-            }
-        ]
-        
-    def get_target_files(self, distortion_factor: float) -> List[Dict[str, str]]:
-        """Get target files for a given distortion factor"""
-        base_path = f"{self.get_base_folder()}/distortion_{distortion_factor}"
-        
-        return [
-            {
-                "path": f"{base_path}/targets.pkl",
-                "label": "original_targets"
-            }
-        ]
-
-
-class ResponseNoisePattern(ExperimentPattern):
-    """Pattern for response-noise-v1.py datasets"""
+    # Add the file's directory to sys.path so it can find local imports
+    original_sys_path = sys.path.copy()
+    if file_dir not in sys.path:
+        sys.path.insert(0, file_dir)
     
-    def __init__(self, model_name: str = "sy_simple"):
-        super().__init__("response-noise-v1", model_name)
-        self.noise_levels = [0, 0.05, 0.1, 0.2, 0.3, 0.5]
-        
-    def get_levels(self) -> List[float]:
-        return self.noise_levels
-        
-    def get_base_folder(self) -> str:
-        return f"{self.model_name}_response_noise_v1"
-        
-    def get_feature_files(self, noise_level: float) -> List[Dict[str, str]]:
-        """Get feature files for a given noise level"""
-        base_path = f"{self.get_base_folder()}/noise_{noise_level}"
-        
-        return [
-            {
-                "path": f"{base_path}/features.pkl",
-                "label": f"features_{noise_level}"
-            },
-            {
-                "path": f"{base_path}/dynamic_features.pkl",
-                "label": f"dynamic_features_{noise_level}"
-            },
-            {
-                "path": f"{base_path}/dynamic_features_no_outcome.pkl",
-                "label": f"dynamic_features_no_outcome_{noise_level}"
-            },
-            {
-                "path": f"{base_path}/last_time_points.pkl",
-                "label": f"last_time_points_{noise_level}"
-            },
-            {
-                "path": f"{base_path}/last_time_points_no_outcome.pkl",
-                "label": f"last_time_points_no_outcome_{noise_level}"
-            }
-        ]
-        
-    def get_target_files(self, noise_level: float) -> List[Dict[str, str]]:
-        """Get target files for a given noise level"""
-        base_path = f"{self.get_base_folder()}/noise_{noise_level}"
-        
-        # For response noise, we have both clean_targets and noisy_targets
-        # Based on user requirements, use clean_targets (original)
-        return [
-            {
-                "path": f"{base_path}/clean_targets.pkl",
-                "label": "original_targets"
-            }
-        ]
+    try:
+        spec = importlib.util.spec_from_file_location(module_name, filepath)
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[module_name] = module
+        spec.loader.exec_module(module)
+        return getattr(module, class_name)
+    finally:
+        # Restore original sys.path
+        sys.path = original_sys_path
+
+
+# Get current directory
+current_dir = os.path.dirname(os.path.abspath(__file__))
+
+# Import task generator classes
+ExpressionNoiseTaskGenerator = import_from_hyphenated_file(
+    os.path.join(current_dir, "expression-noise-v1.py"),
+    "ExpressionNoiseTaskGenerator"
+)
+
+ParameterDistortionTaskGenerator = import_from_hyphenated_file(
+    os.path.join(current_dir, "parameter-distortion-v2.py"),
+    "ParameterDistortionTaskGenerator"
+)
+
+ResponseNoiseTaskGenerator = import_from_hyphenated_file(
+    os.path.join(current_dir, "response-noise-v1.py"),
+    "ResponseNoiseTaskGenerator"
+)
 
 
 class BatchTaskGenerator:
@@ -228,30 +111,30 @@ class BatchTaskGenerator:
     
     def __init__(self, s3_manager: Optional[S3ConfigManager] = None):
         self.s3_manager = s3_manager or S3ConfigManager()
-        self.experiment_patterns = {
-            "expression-noise-v1": ExpressionNoisePattern,
-            "parameter-distortion-v2": ParameterDistortionPattern,
-            "response-noise-v1": ResponseNoisePattern
+        self.experiment_generators = {
+            "expression-noise-v1": ExpressionNoiseTaskGenerator,
+            "parameter-distortion-v2": ParameterDistortionTaskGenerator,
+            "response-noise-v1": ResponseNoiseTaskGenerator
         }
         
-    def register_pattern(self, name: str, pattern_class):
-        """Register a new experiment pattern for extensibility"""
-        self.experiment_patterns[name] = pattern_class
+    def register_generator(self, name: str, generator_class):
+        """Register a new experiment generator for extensibility"""
+        self.experiment_generators[name] = generator_class
         
     def generate_task_list(
         self, 
         experiment_types: List[str],
         output_csv: str,
-        model_name: str = "sy_simple",
+        model_names: List[str],
         verify_exists: bool = False
     ) -> pd.DataFrame:
         """
-        Generate CSV task list for specified experiment types
+        Generate CSV task list for specified experiment types and models
         
         Args:
             experiment_types: List of experiment type names to include
             output_csv: Path to output CSV file
-            model_name: Name of the model (default: 'sy_simple')
+            model_names: List of model names to include
             verify_exists: If True, verify files exist in S3 before adding to list
             
         Returns:
@@ -259,45 +142,48 @@ class BatchTaskGenerator:
         """
         task_rows = []
         
-        for exp_type in experiment_types:
-            if exp_type not in self.experiment_patterns:
-                logger.warning(f"Unknown experiment type: {exp_type}. Skipping.")
-                continue
-                
-            pattern_class = self.experiment_patterns[exp_type]
-            pattern = pattern_class(model_name=model_name)
+        for model_name in model_names:
+            logger.info(f"Generating tasks for model: {model_name}")
             
-            for level in pattern.get_levels():
-                feature_files = pattern.get_feature_files(level)
-                target_files = pattern.get_target_files(level)
+            for exp_type in experiment_types:
+                if exp_type not in self.experiment_generators:
+                    logger.warning(f"Unknown experiment type: {exp_type}. Skipping.")
+                    continue
+                    
+                generator_class = self.experiment_generators[exp_type]
+                generator = generator_class(model_name=model_name)
                 
-                # Create all combinations of feature and target files
-                for feature in feature_files:
-                    for target in target_files:
-                        # Verify file exists in S3 if requested
-                        if verify_exists:
-                            try:
-                                # Check if file exists in S3
-                                full_feature_path = f"{self.s3_manager.save_result_path}/data/{feature['path']}"
-                                full_target_path = f"{self.s3_manager.save_result_path}/data/{target['path']}"
-                                
-                                # Try to load metadata to check existence
-                                self.s3_manager.load_data_from_path(full_feature_path, data_format="pkl")
-                                self.s3_manager.load_data_from_path(full_target_path, data_format="pkl")
-                                
-                            except Exception as e:
-                                logger.warning(f"File not found or error loading: {feature['path']} or {target['path']}. Skipping.")
-                                continue
-                        
-                        task_rows.append({
-                            "feature_data": feature["path"],
-                            "feature_data_label": feature["label"],
-                            "target_data": target["path"],
-                            "target_data_label": target["label"],
-                            "experiment_type": exp_type,
-                            "level": level,
-                            "model_name": model_name
-                        })
+                for level in generator.get_levels():
+                    feature_files = generator.get_feature_files(level)
+                    target_files = generator.get_target_files(level)
+                    
+                    # Create all combinations of feature and target files
+                    for feature in feature_files:
+                        for target in target_files:
+                            # Verify file exists in S3 if requested
+                            if verify_exists:
+                                try:
+                                    # Check if file exists in S3
+                                    full_feature_path = f"{self.s3_manager.save_result_path}/data/{feature['path']}"
+                                    full_target_path = f"{self.s3_manager.save_result_path}/data/{target['path']}"
+                                    
+                                    # Try to load metadata to check existence
+                                    self.s3_manager.load_data_from_path(full_feature_path, data_format="pkl")
+                                    self.s3_manager.load_data_from_path(full_target_path, data_format="pkl")
+                                    
+                                except Exception as e:
+                                    logger.warning(f"File not found or error loading: {feature['path']} or {target['path']}. Skipping.")
+                                    continue
+                            
+                            task_rows.append({
+                                "feature_data": feature["path"],
+                                "feature_data_label": feature["label"],
+                                "target_data": target["path"],
+                                "target_data_label": target["label"],
+                                "experiment_type": exp_type,
+                                "level": level,
+                                "model_name": model_name
+                            })
         
         task_df = pd.DataFrame(task_rows)
         
@@ -345,12 +231,7 @@ class BatchLoader:
                 target_path = f"{self.s3_manager.save_result_path}/data/{row['target_data']}"
                 target_df = self.s3_manager.load_data_from_path(target_path, data_format="pkl")
                 
-                pairs.append((
-                    feature_df,
-                    row["feature_data_label"],
-                    target_df,
-                    row["target_data_label"]
-                ))
+                pairs.append((feature_df, row["feature_data_label"], target_df, row["target_data_label"]))
                 
                 # Cache loaded data
                 self.loaded_data[row["feature_data_label"]] = {
@@ -398,31 +279,52 @@ class BatchLoader:
         return feature_data_list, feature_data_names, target_data, target_name
 
 
-def main():
-    """Main CLI interface"""
-    parser = argparse.ArgumentParser(description="Generate ML batch task lists")
-    parser.add_argument("--experiments", nargs="+", required=True,
-                       choices=["expression-noise-v1", "parameter-distortion-v2", "response-noise-v1"],
-                       help="Experiment types to include")
-    parser.add_argument("--output", "-o", required=True, help="Output CSV path")
-    parser.add_argument("--model", default="sy_simple", help="Model name")
-    parser.add_argument("--verify", action="store_true", 
-                       help="Verify files exist in S3 before adding to list")
-    parser.add_argument("--generate-only", action="store_true",
-                       help="Only generate CSV, don't create loader example")
+def print_task_summary(task_df: pd.DataFrame):
+    """
+    Print summary of task list.
     
-    args = parser.parse_args()
+    Args:
+        task_df: DataFrame containing task list
+    """
+    print("\n" + "="*60)
+    print("TASK LIST SUMMARY")
+    print("="*60)
+    
+    print(f"Total tasks: {len(task_df)}")
+    
+    if len(task_df) > 0:
+        print("\nExperiment types:")
+        for exp_type, count in task_df['experiment_type'].value_counts().items():
+            print(f"  - {exp_type}: {count} tasks")
+        
+        print("\nModels:")
+        for model, count in task_df['model_name'].value_counts().items():
+            print(f"  - {model}: {count} tasks")
+        
+        print("\nSample task rows:")
+        print(task_df.head(3).to_string(index=False))
+    
+    print("="*60)
+
+
+def main():
+    """Main execution function - configuration-based version"""
+    
+    # Process model configuration
+    model_names = process_model_config(MODEL_NAME)
+    logger.info(f"Processing {len(model_names)} model(s): {model_names}")
+    logger.info(f"Experiment types: {EXPERIMENT_TYPES}")
     
     # Generate task list
     generator = BatchTaskGenerator()
     task_df = generator.generate_task_list(
-        experiment_types=args.experiments,
-        output_csv=args.output,
-        model_name=args.model,
-        verify_exists=args.verify
+        experiment_types=EXPERIMENT_TYPES,
+        output_csv=OUTPUT_CSV,
+        model_names=model_names,
+        verify_exists=VERIFY_EXISTS
     )
     
-    if not args.generate_only and len(task_df) > 0:
+    if not GENERATE_ONLY and len(task_df) > 0:
         # Create example usage
         print("\n" + "="*60)
         print("EXAMPLE USAGE FOR ML WORKFLOW INTEGRATION")
@@ -436,7 +338,7 @@ from src.ml.Workflow import batch_eval_standard
 
 # 1. Load the task list
 loader = BatchLoader()
-loader.load_task_list("{args.output}")
+loader.load_task_list("{OUTPUT_CSV}")
 
 # 2. Prepare data for batch_eval
 feature_data_list, feature_data_names, target_data, target_name = loader.prepare_for_batch_eval()
@@ -461,8 +363,8 @@ print(results.head())
         print("\nAlternative: Load specific experiment type")
         alt_code = f'''
 # To load only specific experiment types, filter the task list first:
-task_df = pd.read_csv("{args.output}")
-filtered_df = task_df[task_df["experiment_type"].isin({args.experiments})]
+task_df = pd.read_csv("{OUTPUT_CSV}")
+filtered_df = task_df[task_df["experiment_type"].isin({EXPERIMENT_TYPES})]
 filtered_df.to_csv("filtered_tasks.csv", index=False)
 
 loader = BatchLoader()
@@ -470,6 +372,9 @@ loader.load_task_list("filtered_tasks.csv")
 # ... continue with batch_eval as above
 '''
         print(alt_code)
+    
+    # Print summary
+    print_task_summary(task_df)
 
 
 if __name__ == "__main__":

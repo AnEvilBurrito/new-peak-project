@@ -55,7 +55,6 @@ N_JOBS = -1          # Number of parallel jobs (-1 for all cores)
 
 # Output configuration
 UPLOAD_S3 = True     # Upload results to S3 (True/False)
-OUTPUT_DIR = "ml_results"  # Local output directory
 SKIP_FAILED = True   # Skip failed tasks and continue processing
 
 # ===== END CONFIGURATION =====
@@ -304,51 +303,6 @@ def save_results_to_s3(
     return s3_paths
 
 
-def save_results_locally(
-    results_df: pd.DataFrame,
-    summary_df: pd.DataFrame,
-    metadata: Dict[str, Any],
-    failed_tasks_df: Optional[pd.DataFrame],
-    output_dir: str,
-    experiment_type: str,
-    model_name: str
-) -> Dict[str, str]:
-    """Save results to local directory"""
-    # Create output directory
-    exp_dir = os.path.join(output_dir, experiment_type, model_name)
-    os.makedirs(exp_dir, exist_ok=True)
-    
-    local_paths = {}
-    
-    # Save results DataFrame
-    if results_df is not None and len(results_df) > 0:
-        results_path = os.path.join(exp_dir, "results.pkl")
-        results_df.to_pickle(results_path)
-        local_paths["results"] = results_path
-        logger.info(f"✅ Saved results locally: {results_path}")
-    
-    # Save summary statistics
-    if summary_df is not None and len(summary_df) > 0:
-        summary_path = os.path.join(exp_dir, "summary-stats.csv")
-        summary_df.to_csv(summary_path, index=False)
-        local_paths["summary"] = summary_path
-        logger.info(f"✅ Saved summary stats locally: {summary_path}")
-    
-    # Save metadata
-    metadata_path = os.path.join(exp_dir, "run-metadata.yml")
-    with open(metadata_path, "w") as f:
-        yaml.dump(metadata, f, default_flow_style=False)
-    local_paths["metadata"] = metadata_path
-    logger.info(f"✅ Saved metadata locally: {metadata_path}")
-    
-    # Save failed tasks (if any)
-    if failed_tasks_df is not None and len(failed_tasks_df) > 0:
-        failed_path = os.path.join(exp_dir, "failed-tasks.csv")
-        failed_tasks_df.to_csv(failed_path, index=False)
-        local_paths["failed_tasks"] = failed_path
-        logger.info(f"✅ Saved failed tasks locally: {failed_path}")
-    
-    return local_paths
 
 
 def main():
@@ -362,7 +316,6 @@ def main():
     random_seed = RANDOM_SEED
     n_jobs = N_JOBS
     upload_s3 = UPLOAD_S3
-    output_dir = OUTPUT_DIR
     skip_failed = SKIP_FAILED
     
     # Normalize model names to list format
@@ -372,6 +325,8 @@ def main():
     logger.info(f"CSV: {csv_path}")
     logger.info(f"Experiment types: {experiment_types}")
     logger.info(f"Upload to S3: {upload_s3}")
+    if not upload_s3:
+        logger.warning("⚠️  WARNING: UPLOAD_S3 is False - results will not be saved to S3 or locally")
     logger.info(f"Model names: {model_names_normalized or 'Auto-detect from CSV'}")
     logger.info(f"Num repeats: {num_repeats}, Test size: {test_size}")
     logger.info(f"Random seed: {random_seed}, Parallel jobs: {n_jobs}")
@@ -467,17 +422,8 @@ def main():
                     )
                     metadata["s3_paths"] = s3_paths
                 
-                # Always save locally
-                local_paths = save_results_locally(
-                    results_df=results_df,
-                    summary_df=summary_df,
-                    metadata=metadata,
-                    failed_tasks_df=failed_tasks_df,
-                    output_dir=output_dir,
-                    experiment_type=experiment_type,
-                    model_name=model_name
-                )
-                metadata["local_paths"] = local_paths
+                # Skip local saving (OUTPUT_DIR removed per user request)
+                # Results are only saved to S3 when UPLOAD_S3 = True
                 
                 # Store results
                 model_results[experiment_type] = {
@@ -537,32 +483,7 @@ def main():
             logger.info(f"❌ Models with failures: {len(failed_models)}")
             logger.info(f"  - {', '.join(failed_models)}")
         
-        # Save overall summary
-        if output_dir:
-            summary_path = os.path.join(output_dir, "execution-summary.yml")
-            overall_metadata = {
-                "script": "run-ml-batch-v1.py",
-                "csv_source": csv_path,
-                "model_names": model_names_normalized,
-                "experiment_types": experiment_types,
-                "evaluation_params": evaluation_params,
-                "execution_time_seconds": duration,
-                "start_time": start_time.isoformat(),
-                "end_time": end_time.isoformat(),
-                "models_processed": len(overall_results),
-                "model_results": {
-                    model_name: {
-                        "experiments_processed": len(data["experiment_results"]),
-                        "status": "success" if model_name in successful_models else "partial_failure"
-                    }
-                    for model_name, data in overall_results.items()
-                }
-            }
-            
-            with open(summary_path, "w") as f:
-                yaml.dump(overall_metadata, f, default_flow_style=False)
-            
-            logger.info(f"✅ Saved execution summary: {summary_path}")
+        # Skip overall summary saving (OUTPUT_DIR removed per user request)
         
         logger.info("🎉 ML Batch Evaluation completed successfully!")
         

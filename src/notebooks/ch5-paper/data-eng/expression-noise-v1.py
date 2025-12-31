@@ -1,5 +1,5 @@
 """
-Complete Expression Noise Data Generation Script
+Complete Expression Noise Data Generation Script - Configuration Version
 
 Generates comprehensive datasets with Gaussian noise applied to feature data including:
 - Noisy feature data at different noise levels
@@ -9,11 +9,14 @@ Generates comprehensive datasets with Gaussian noise applied to feature data inc
 - Last time point data
 
 Follows the complete S3 storage pattern of sy_simple-make-data-v1.py.
+
+CONFIGURATION-BASED VERSION:
+For remote batch job execution where modifying script variables is more practical than CLI arguments.
+Supports single model (string) or multiple models (list) for multiplexing.
 """
 
 import sys
 import os
-import argparse
 from dotenv import dotenv_values
 import pandas as pd
 import numpy as np
@@ -42,6 +45,37 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
+# ===== CONFIGURATION SECTION =====
+# MODIFY THESE VARIABLES FOR YOUR BATCH JOB
+MODEL_NAME = "sy_simple"  # Can be string: "sy_simple" or list: ["sy_simple", "model_v2"]
+NOISE_LEVELS = [0, 0.1, 0.2, 0.3, 0.5, 1.0]
+N_SAMPLES = 2000
+SEED = 42
+SIMULATION_PARAMS = {'start': 0, 'end': 10000, 'points': 101}
+OUTCOME_VAR = "Oa"
+UPLOAD_S3 = True
+SEND_NOTIFICATIONS = True
+# ===== END CONFIGURATION =====
+
+
+def process_model_config(model_config):
+    """
+    Convert MODEL_NAME config to list of model names for processing.
+    
+    Args:
+        model_config: Can be string (single model) or list (multiple models)
+    
+    Returns:
+        List of model names
+    """
+    if isinstance(model_config, str):
+        return [model_config]
+    elif isinstance(model_config, list):
+        return model_config
+    else:
+        raise ValueError(f"MODEL_NAME must be str or list, got {type(model_config)}")
+
+
 class ExpressionNoiseTaskGenerator(BaseTaskGenerator):
     """
     Task generator for expression-noise-v1 experiment pattern.
@@ -53,7 +87,7 @@ class ExpressionNoiseTaskGenerator(BaseTaskGenerator):
     def __init__(self, model_name: str = "sy_simple"):
         super().__init__(model_name)
         self.experiment_type = "expression-noise-v1"
-        self.noise_levels = [0, 0.1, 0.2, 0.3, 0.5, 1.0]
+        self.noise_levels = NOISE_LEVELS  # Use configuration
         
     def get_levels(self):
         return self.noise_levels
@@ -139,15 +173,15 @@ def apply_expression_noise(feature_data, noise_level, seed):
     return noisy_feature_data
 
 
-def generate_base_feature_data(model_spec, initial_values, n_samples=2000, seed=42):
+def generate_base_feature_data(model_spec, initial_values, n_samples=N_SAMPLES, seed=SEED):
     """
     Generate base feature data using lhs perturbation
     
     Args:
         model_spec: ModelSpecification instance
         initial_values: Dictionary of initial values (inactive state variables)
-        n_samples: Number of samples
-        seed: Random seed
+        n_samples: Number of samples (from configuration)
+        seed: Random seed (from configuration)
     
     Returns:
         DataFrame of feature data
@@ -329,7 +363,7 @@ def generate_complete_dataset_for_noise_level(
         parameter_df=parameter_df,
         simulation_params=simulation_params,
         n_cores=1,
-        outcome_var='Oa',
+        outcome_var=OUTCOME_VAR,
         capture_all_species=True,
         verbose=False
     )
@@ -385,7 +419,7 @@ def generate_complete_dataset_for_noise_level(
         parameter_df=parameter_df,
         simulation_params=simulation_params,
         n_cores=1,
-        outcome_var='Oa',
+        outcome_var=OUTCOME_VAR,
         capture_all_species=True,
         verbose=False
     )
@@ -418,6 +452,10 @@ def save_complete_dataset(dataset_dict, noise_level, model_name, s3_manager):
         model_name: Name of the model
         s3_manager: S3ConfigManager instance
     """
+    if not UPLOAD_S3:
+        logger.info(f"Skipping S3 upload for model {model_name}, noise level {noise_level}")
+        return
+    
     gen_path = s3_manager.save_result_path
     folder_name = f"{model_name}_expression_noise_v1"
     subfolder_name = f"noise_{noise_level}"
@@ -496,83 +534,76 @@ def generate_csv_task_list():
     """
     Generate CSV task list for expression noise experiments.
     
-    This function provides a command-line interface for generating
+    This function provides a configuration-based interface for generating
     CSV task lists without running the full data generation pipeline.
     """
-    parser = argparse.ArgumentParser(
-        description="Generate CSV task list for expression-noise-v1 experiments"
-    )
-    parser.add_argument(
-        "--output", "-o", 
-        required=True,
-        help="Output CSV file path"
-    )
-    parser.add_argument(
-        "--model", 
-        default="sy_simple",
-        help="Model name (default: sy_simple)"
-    )
-    parser.add_argument(
-        "--verify", 
-        action="store_true",
-        help="Verify files exist in S3 before adding to list"
-    )
-    parser.add_argument(
-        "--summary",
-        action="store_true",
-        help="Print summary of generated task list"
-    )
-    
-    args = parser.parse_args()
-    
     logger.info("🚀 Generating CSV task list for expression-noise-v1")
     
-    # Create task generator
-    generator = ExpressionNoiseTaskGenerator(model_name=args.model)
+    # Process model configuration
+    model_names = process_model_config(MODEL_NAME)
     
-    # Initialize S3 manager if verification is requested
-    s3_manager = None
-    if args.verify:
-        s3_manager = S3ConfigManager()
-        logger.info("File verification enabled - checking S3 file existence")
+    all_task_rows = []
     
-    # Generate task list
-    task_df = generator.generate_task_list(
-        output_csv=args.output,
-        verify_exists=args.verify,
-        s3_manager=s3_manager
-    )
-    
-    if args.summary:
-        print_task_summary(task_df)
-    
-    logger.info(f"✅ CSV generation complete: {args.output}")
-
-
-def main():
-    """Main execution function"""
-    # Check if CSV generation mode is requested
-    if len(sys.argv) > 1 and sys.argv[1] in ['--output', '-o', '--generate-csv']:
-        generate_csv_task_list()
-        return
-    
-    logger.info("🚀 Starting Complete Expression Noise Data Generation")
-    
-    # Send start notification
-    script_name = 'expression-noise'
-    notify_start(script_name)
-    
-    start_time = datetime.now()
-    
-    try:
-        # Initialize S3 manager
-        s3_manager = S3ConfigManager()
+    for model_name in model_names:
+        logger.info(f"Generating tasks for model: {model_name}")
         
-        # Configuration
-        model_name = "sy_simple"
-        noise_levels = [0, 0.1, 0.2, 0.3, 0.5, 1.0]
-        n_samples = 2000
-        seed = 42
+        # Create task generator
+        generator = ExpressionNoiseTaskGenerator(model_name=model_name)
+        
+        # Initialize S3 manager if verification is needed
+        s3_manager = None
+        
+        # Generate task list for this model
+        task_rows = []
+        for level in generator.get_levels():
+            feature_files = generator.get_feature_files(level)
+            target_files = generator.get_target_files(level)
+            
+            # Create all combinations of feature and target files
+            for feature in feature_files:
+                for target in target_files:
+                    task_rows.append({
+                        "feature_data": feature["path"],
+                        "feature_data_label": feature["label"],
+                        "target_data": target["path"],
+                        "target_data_label": target["label"],
+                        "experiment_type": generator.experiment_type,
+                        "level": level,
+                        "model_name": model_name
+                    })
+        
+        all_task_rows.extend(task_rows)
+        logger.info(f"Generated {len(task_rows)} tasks for model {model_name}")
+    
+    # Save combined task list
+    if all_task_rows:
+        output_csv = f"expression_noise_tasks_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+        task_df = pd.DataFrame(all_task_rows)
+        task_df.to_csv(output_csv, index=False)
+        logger.info(f"✅ Generated task list with {len(task_df)} rows to: {output_csv}")
+        
+        if len(model_names) > 1:
+            print_task_summary(task_df)
+        
+        return task_df
+    else:
+        logger.warning("No tasks generated")
+        return pd.DataFrame()
+
+
+def process_single_model(model_name, s3_manager):
+    """
+    Process a single model through the expression noise pipeline.
+    
+    Args:
+        model_name: Name of the model to process
+        s3_manager: S3ConfigManager instance
+    
+    Returns:
+        True if successful, False otherwise
+    """
+    try:
+        logger.info(f"🚀 Starting expression noise generation for model: {model_name}")
         
         # Load model objects
         model_spec, model_builder, model_tuner = load_model_objects(model_name, s3_manager)
@@ -589,28 +620,25 @@ def main():
         
         # Get original parameters
         original_params = model_builder.get_parameters()
-        parameter_df = pd.DataFrame([original_params] * n_samples)
-        parameter_df['sample_id'] = range(n_samples)
+        parameter_df = pd.DataFrame([original_params] * N_SAMPLES)
+        parameter_df['sample_id'] = range(N_SAMPLES)
         
         # Create clean parameter DataFrame for simulation (without metadata columns)
-        clean_parameter_df = pd.DataFrame([original_params] * n_samples)  # Only kinetic parameters
-        
-        # Simulation parameters (matching sy_simple-make-data-v1.py)
-        simulation_params = {'start': 0, 'end': 10000, 'points': 101}
+        clean_parameter_df = pd.DataFrame([original_params] * N_SAMPLES)  # Only kinetic parameters
         
         # Generate base feature data (clean)
         logger.info("Generating base (clean) feature data...")
-        base_feature_data = generate_base_feature_data(model_spec, initial_values, n_samples, seed)
+        base_feature_data = generate_base_feature_data(model_spec, initial_values, N_SAMPLES, SEED)
         
         # Process each noise level
         total_datasets = 0
-        for noise_level in noise_levels:
+        for noise_level in NOISE_LEVELS:
             logger.info(f"Processing noise level: {noise_level}")
             
             # Apply expression noise to feature data
             logger.info(f"Applying Gaussian noise (level={noise_level}) to feature data...")
             noisy_feature_data = apply_expression_noise(
-                base_feature_data, noise_level, seed
+                base_feature_data, noise_level, SEED
             )
             
             # Generate complete dataset for this noise level
@@ -622,7 +650,7 @@ def main():
                 model_builder=model_builder,
                 solver=solver,
                 noise_level=noise_level,
-                simulation_params=simulation_params
+                simulation_params=SIMULATION_PARAMS
             )
             
             # Save complete dataset to S3
@@ -631,38 +659,70 @@ def main():
             total_datasets += 1
             logger.info(f"✅ Completed noise level {noise_level}")
         
-        # Calculate execution time
-        end_time = datetime.now()
-        duration = (end_time - start_time).total_seconds()
-        
-        # Send success notification
-        notify_success(script_name, duration, processed_count=len(noise_levels))
-        
-        logger.info("✅ Complete expression noise data generation finished successfully")
-        logger.info(f"Generated {len(noise_levels)} noise levels")
-        logger.info(f"Total datasets created: {total_datasets}")
-        logger.info(f"Total execution time: {duration:.2f} seconds ({duration/60:.2f} minutes)")
-        
-        # List files for verification
-        folder_name = f"{model_name}_expression_noise_v1"
-        item_list = s3_manager.list_files_from_path(f"{s3_manager.save_result_path}/data/{folder_name}/")
-        
-        logger.info("Files in S3:")
-        for item in item_list:
-            logger.info(f"  - {item}")
+        logger.info(f"✅ Successfully processed model {model_name}: {total_datasets} datasets created")
+        return True
         
     except Exception as e:
-        logger.error(f"❌ Expression noise data generation failed: {e}")
-        # Send failure notification
-        duration = (datetime.now() - start_time).total_seconds()
-        notify_failure(script_name, e, duration_seconds=duration)
-        raise
+        logger.error(f"❌ Failed to process model {model_name}: {e}")
+        return False
+
+
+def main():
+    """Main execution function - configuration-based version"""
+    
+    # Send start notification if enabled
+    if SEND_NOTIFICATIONS:
+        script_name = 'expression-noise-config'
+        notify_start(script_name)
+    
+    start_time = datetime.now()
+    
+    # Process model configuration
+    model_names = process_model_config(MODEL_NAME)
+    logger.info(f"Processing {len(model_names)} model(s): {model_names}")
+    
+    # Initialize S3 manager
+    s3_manager = S3ConfigManager() if UPLOAD_S3 else None
+    
+    # Process each model
+    successful_models = []
+    failed_models = []
+    
+    for i, model_name in enumerate(model_names, 1):
+        logger.info(f"Processing model {i}/{len(model_names)}: {model_name}")
+        
+        success = process_single_model(model_name, s3_manager)
+        
+        if success:
+            successful_models.append(model_name)
+        else:
+            failed_models.append(model_name)
+    
+    # Calculate execution time
+    end_time = datetime.now()
+    duration = (end_time - start_time).total_seconds()
+    
+    # Send notifications if enabled
+    if SEND_NOTIFICATIONS:
+        if failed_models:
+            error_msg = f"Failed models: {failed_models}"
+            notify_failure('expression-noise-config', error_msg, duration_seconds=duration)
+        else:
+            notify_success('expression-noise-config', duration, processed_count=len(successful_models))
+    
+    # Summary
+    logger.info("=" * 60)
+    logger.info("PROCESSING SUMMARY")
+    logger.info("=" * 60)
+    logger.info(f"Total models: {len(model_names)}")
+    logger.info(f"Successful: {len(successful_models)} - {successful_models}")
+    logger.info(f"Failed: {len(failed_models)} - {failed_models}")
+    logger.info(f"Total execution time: {duration:.2f} seconds ({duration/60:.2f} minutes)")
+    logger.info("=" * 60)
+    
+    if failed_models:
+        raise RuntimeError(f"Processing failed for models: {failed_models}")
 
 
 if __name__ == "__main__":
-    # Check command line arguments to determine mode
-    if len(sys.argv) > 1:
-        main()
-    else:
-        # Default: run data generation with default parameters
-        main()
+    main()

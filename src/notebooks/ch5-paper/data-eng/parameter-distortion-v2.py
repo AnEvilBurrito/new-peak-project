@@ -49,7 +49,7 @@ logger = logging.getLogger(__name__)
 # ===== CONFIGURATION SECTION =====
 # MODIFY THESE VARIABLES FOR YOUR BATCH JOB
 MODEL_NAME = "sy_simple"  # Can be string: "sy_simple" or list: ["sy_simple", "model_v2"]
-DISTORTION_FACTORS = [0, 1.1, 1.3, 1.5, 2.0, 3.0]
+DISTORTION_FACTORS = [0, 0.1, 0.2, 0.3, 0.5, 1.0]  # Additive noise levels (fraction of parameter std dev)
 N_SAMPLES = 2000
 SEED = 42
 SIMULATION_PARAMS = {'start': 0, 'end': 10000, 'points': 101}
@@ -138,11 +138,12 @@ class ParameterDistortionTaskGenerator(BaseTaskGenerator):
 
 def apply_gaussian_distortion(original_params, distortion_factor, seed=42):
     """
-    Apply Gaussian noise distortion to parameters
+    Apply ADDITIVE Gaussian noise to parameters (like expression-noise-v1.py)
     
     Args:
         original_params: Dictionary of original parameters from model_builder
         distortion_factor: Controls strength of distortion (0 = no distortion)
+                         Now interpreted as fraction of parameter standard deviation
         seed: Random seed for reproducible distortion
     
     Returns:
@@ -154,11 +155,14 @@ def apply_gaussian_distortion(original_params, distortion_factor, seed=42):
     rng = default_rng(seed)
     distorted_params = {}
     
+    # Calculate baseline standard deviation of all parameters
+    param_values = np.array(list(original_params.values()))
+    base_std = np.std(param_values)
+    
     for key, value in original_params.items():
-        # Apply Gaussian noise scaled by distortion factor
-        relative_noise = rng.normal(loc=0, scale=distortion_factor)
-        noise_amount = value * relative_noise
-        distorted_params[key] = max(value + noise_amount, 1e-8)  # Ensure non-negative
+        # Apply additive Gaussian noise scaled by distortion_factor * base_std
+        noise = rng.normal(loc=0, scale=distortion_factor * base_std)
+        distorted_params[key] = max(value + noise, 1e-8)  # Ensure non-negative
     
     return distorted_params
 

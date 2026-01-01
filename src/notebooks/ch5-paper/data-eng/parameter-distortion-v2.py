@@ -49,14 +49,14 @@ logger = logging.getLogger(__name__)
 # ===== CONFIGURATION SECTION =====
 # MODIFY THESE VARIABLES FOR YOUR BATCH JOB
 MODEL_NAME = "sy_simple"  # Can be string: "sy_simple" or list: ["sy_simple", "model_v2"]
-DISTORTION_FACTORS = [0, 1.1, 1.3, 1.5, 2.0, 3.0]
-N_SAMPLES = 2000
+DISTORTION_FACTORS = [0, 0.1, 0.2, 0.3, 0.5, 1.0]  # Multiplicative noise levels (fraction of parameter value for noise std)
+N_SAMPLES = 50  # Reduced for testing
 SEED = 42
 SIMULATION_PARAMS = {'start': 0, 'end': 10000, 'points': 101}
 OUTCOME_VAR = "Oa"
-UPLOAD_S3 = True
-SEND_NOTIFICATIONS = True
-GENERATE_ML_TASK_LIST = True
+UPLOAD_S3 = False  # Disable S3 upload for testing
+SEND_NOTIFICATIONS = False  # Disable notifications for testing
+GENERATE_ML_TASK_LIST = False  # Disable ML task generation for testing
 # ===== END CONFIGURATION =====
 
 
@@ -126,23 +126,26 @@ class ParameterDistortionTaskGenerator(BaseTaskGenerator):
         
     def get_target_files(self, distortion_factor):
         """Get target files for a given distortion factor"""
-        base_path = f"{self.get_base_folder()}/distortion_{distortion_factor}"
+        # All distortion levels should use the BASELINE targets (ground truth)
+        # from baseline virtual models for ML prediction tasks
+        base_path = f"{self.get_base_folder()}"
         
         return [
             {
-                "path": f"{base_path}/targets.pkl",
-                "label": "original_targets"
+                "path": f"{base_path}/baseline_targets.pkl",
+                "label": "baseline_targets"
             }
         ]
 
 
 def apply_gaussian_distortion(original_params, distortion_factor, seed=42):
     """
-    Apply Gaussian noise distortion to parameters
+    Apply multiplicative Gaussian noise to parameters with scale-proportional distortion.
     
     Args:
         original_params: Dictionary of original parameters from model_builder
         distortion_factor: Controls strength of distortion (0 = no distortion)
+                         Interpreted as fraction of parameter value for noise std
         seed: Random seed for reproducible distortion
     
     Returns:
@@ -155,10 +158,11 @@ def apply_gaussian_distortion(original_params, distortion_factor, seed=42):
     distorted_params = {}
     
     for key, value in original_params.items():
-        # Apply Gaussian noise scaled by distortion factor
-        relative_noise = rng.normal(loc=0, scale=distortion_factor)
-        noise_amount = value * relative_noise
-        distorted_params[key] = max(value + noise_amount, 1e-8)  # Ensure non-negative
+        # Apply multiplicative Gaussian noise with std = distortion_factor * value
+        # This ensures noise scales proportionally with parameter magnitude
+        noise_std = distortion_factor * abs(value)
+        noise = rng.normal(loc=0, scale=noise_std)
+        distorted_params[key] = max(value + noise, 1e-8)  # Ensure non-negative
     
     return distorted_params
 
@@ -364,7 +368,8 @@ def generate_complete_dataset_for_distortion_level(
     model_builder,
     solver,
     distortion_factor,
-    simulation_params
+    simulation_params,
+    success_indices=None
 ):
     """
     Generate complete dataset for a specific distortion level
@@ -376,34 +381,65 @@ def generate_complete_dataset_for_distortion_level(
         solver: Solver instance
         distortion_factor: Current distortion factor
         simulation_params: Simulation parameters
+        success_indices: Optional list of indices to use (if None, will run simulation)
     
     Returns:
         Dictionary containing all dataset components
     """
     logger.info(f"Generating complete dataset for distortion factor {distortion_factor}")
     
-    # Generate target and timecourse data using robust version
-    logger.info("Generating target and timecourse data (robust)...")
-    target_data, timecourse_data, success_mask = make_target_data_with_params_robust(
-        model_spec=model_spec,
-        solver=solver,
-        feature_df=feature_data,
-        parameter_df=parameter_df,
-        simulation_params=simulation_params,
-        n_cores=1,
-        outcome_var=OUTCOME_VAR,
-        capture_all_species=True,
-        verbose=False
-    )
-    
-    # Filter all datasets to keep only successful samples
-    feature_data = feature_data[success_mask].reset_index(drop=True)
-    parameter_df = parameter_df[success_mask].reset_index(drop=True)
-    target_data = target_data.reset_index(drop=True)
-    
-    # Reset timecourse data indices if it's a DataFrame
-    if isinstance(timecourse_data, pd.DataFrame):
-        timecourse_data = timecourse_data.reset_index(drop=True)
+    if success_indices is not None:
+        # Use pre-determined successful indices
+        logger.info(f"Using {len(success_indices)} pre-selected successful samples")
+        
+        # Filter data to only successful indices
+        feature_data_filtered = feature_data.iloc[success_indices].reset_index(drop=True)
+        parameter_df_filtered = parameter_df.iloc[success_indices].reset_index(drop=True)
+        
+        # Generate target data for filtered samples
+        target_data, timecourse_data, _ = make_target_data_with_params_robust(
+            model_spec=model_spec,
+            solver=solver,
+            feature_df=feature_data_filtered,
+            parameter_df=parameter_df_filtered,
+            simulation_params=simulation_params,
+            n_cores=1,
+            outcome_var=OUTCOME_VAR,
+            capture_all_species=True,
+            verbose=False
+        )
+        
+        # Reset indices
+        target_data = target_data.reset_index(drop=True)
+        if isinstance(timecourse_data, pd.DataFrame):
+            timecourse_data = timecourse_data.reset_index(drop=True)
+        
+        # Create success mask for internal tracking
+        success_mask = pd.Series([True] * len(success_indices))
+        
+    else:
+        # Generate target and timecourse data using robust version (original behavior)
+        logger.info("Generating target and timecourse data (robust)...")
+        target_data, timecourse_data, success_mask = make_target_data_with_params_robust(
+            model_spec=model_spec,
+            solver=solver,
+            feature_df=feature_data,
+            parameter_df=parameter_df,
+            simulation_params=simulation_params,
+            n_cores=1,
+            outcome_var=OUTCOME_VAR,
+            capture_all_species=True,
+            verbose=False
+        )
+        
+        # Filter all datasets to keep only successful samples
+        feature_data = feature_data[success_mask].reset_index(drop=True)
+        parameter_df = parameter_df[success_mask].reset_index(drop=True)
+        target_data = target_data.reset_index(drop=True)
+        
+        # Reset timecourse data indices if it's a DataFrame
+        if isinstance(timecourse_data, pd.DataFrame):
+            timecourse_data = timecourse_data.reset_index(drop=True)
     
     # Calculate dynamic features
     logger.info("Calculating dynamic features...")
@@ -645,6 +681,9 @@ def process_single_model(model_name, s3_manager):
     """
     Process a single model through the parameter distortion pipeline.
     
+    Uses baseline virtual models generated with lognormal perturbation (like sy_simple-make-data-v1.py)
+    and applies additional Gaussian distortion to parameters only.
+    
     Args:
         model_name: Name of the model to process
         s3_manager: S3ConfigManager instance
@@ -662,23 +701,103 @@ def process_single_model(model_name, s3_manager):
         solver = RoadrunnerSolver()
         solver.compile(model_builder.get_sbml_model())
         
-        # Get initial values (inactive state variables)
-        state_variables = model_builder.get_state_variables()
-        initial_values = {k: v for k, v in state_variables.items() if not k.endswith('a')}
-        if 'O' in initial_values:
-            del initial_values['O']
+        # Step 1: Generate or load baseline virtual models
+        logger.info("Generating baseline virtual models with lognormal perturbation...")
+        from baseline_generator import generate_baseline_virtual_models
         
-        # Generate base feature data (same for all distortion levels)
-        logger.info("Generating base feature data...")
-        feature_data = generate_feature_data(model_spec, initial_values, N_SAMPLES, SEED)
-        
-        # Generate distorted parameter sets
-        logger.info("Generating distorted parameter sets...")
-        all_distorted_sets = generate_distorted_parameter_sets(
-            model_builder, DISTORTION_FACTORS, N_SAMPLES, SEED
+        baseline_data = generate_baseline_virtual_models(
+            model_spec=model_spec,
+            model_builder=model_builder,
+            solver=solver,
+            n_samples=N_SAMPLES,
+            seed=SEED,
+            simulation_params=SIMULATION_PARAMS
         )
         
-        # Process each distortion factor
+        baseline_features = baseline_data['features']
+        baseline_targets = baseline_data['targets']
+        baseline_parameters = baseline_data['parameters']
+        
+        logger.info(f"Baseline features shape: {baseline_features.shape}")
+        logger.info(f"Baseline parameters shape: {baseline_parameters.shape}")
+        logger.info(f"Baseline targets shape: {baseline_targets.shape}")
+        
+        # Save baseline for reference
+        if UPLOAD_S3 and s3_manager:
+            from baseline_generator import save_baseline_to_s3
+            baseline_paths = save_baseline_to_s3(
+                baseline_data, model_name, s3_manager, upload=UPLOAD_S3
+            )
+            logger.info(f"✅ Saved baseline virtual models to S3")
+        
+        # Step 2: Generate distorted parameter sets from baseline
+        logger.info("Generating distorted parameter sets from baseline...")
+        all_distorted_sets = {}
+        
+        for distortion_factor in DISTORTION_FACTORS:
+            logger.info(f"Generating parameter sets with distortion factor {distortion_factor}")
+            
+            distorted_parameter_sets = []
+            for i in range(len(baseline_parameters)):
+                # Get baseline parameters for this virtual model
+                baseline_params = baseline_parameters.iloc[i].to_dict()
+                
+                # Apply additional Gaussian distortion
+                distorted_params = apply_gaussian_distortion(
+                    baseline_params, distortion_factor, SEED + i
+                )
+                distorted_parameter_sets.append(distorted_params)
+            
+            all_distorted_sets[distortion_factor] = distorted_parameter_sets
+        
+        # Step 3: Identify samples that succeed at ALL distortion levels
+        logger.info("Identifying samples that succeed at ALL distortion levels...")
+        all_success_masks = {}
+        
+        for distortion_factor in DISTORTION_FACTORS:
+            logger.info(f"Testing samples at distortion factor {distortion_factor}...")
+            parameter_sets = all_distorted_sets[distortion_factor]
+            clean_parameter_df = pd.DataFrame(parameter_sets)
+            
+            # Run simulation to get success mask
+            target_data, timecourse_data, success_mask = make_target_data_with_params_robust(
+                model_spec=model_spec,
+                solver=solver,
+                feature_df=baseline_features,
+                parameter_df=clean_parameter_df,
+                simulation_params=SIMULATION_PARAMS,
+                n_cores=1,
+                outcome_var=OUTCOME_VAR,
+                capture_all_species=True,
+                verbose=False
+            )
+            
+            all_success_masks[distortion_factor] = success_mask
+        
+        # Find intersection of successful samples across ALL distortion levels
+        success_intersection = pd.Series([True] * len(baseline_features))
+        for distortion_factor, success_mask in all_success_masks.items():
+            success_intersection = success_intersection & success_mask
+        
+        success_indices = success_intersection[success_intersection].index.tolist()
+        logger.info(f"Found {len(success_indices)} samples that succeed at ALL distortion levels out of {len(baseline_features)} total")
+        
+        if len(success_indices) == 0:
+            logger.error("❌ No samples succeeded at all distortion levels. Cannot proceed.")
+            return False
+        
+        # Step 4: Save baseline targets (ground truth) for ML tasks
+        if UPLOAD_S3 and s3_manager:
+            # Filter baseline targets to only successful samples
+            baseline_targets_filtered = baseline_targets.loc[success_indices].reset_index(drop=True)
+            
+            gen_path = s3_manager.save_result_path
+            folder_name = f"{model_name}_parameter_distortion_v2"
+            baseline_targets_path = f"{gen_path}/data/{folder_name}/baseline_targets.pkl"
+            s3_manager.save_data_from_path(baseline_targets_path, baseline_targets_filtered, data_format="pkl")
+            logger.info(f"✅ Saved baseline targets (ground truth) to S3: {baseline_targets_path}")
+        
+        # Step 5: Process each distortion factor
         total_datasets = 0
         for distortion_factor in DISTORTION_FACTORS:
             logger.info(f"Processing distortion factor: {distortion_factor}")
@@ -687,20 +806,21 @@ def process_single_model(model_name, s3_manager):
             parameter_sets = all_distorted_sets[distortion_factor]
             parameter_df = pd.DataFrame(parameter_sets)
             parameter_df['distortion_factor'] = distortion_factor
-            parameter_df['sample_id'] = range(N_SAMPLES)
+            parameter_df['sample_id'] = range(len(baseline_features))
             
             # Create clean parameter DataFrame for simulation (without metadata columns)
-            clean_parameter_df = pd.DataFrame(parameter_sets)  # Only kinetic parameters
+            clean_parameter_df = pd.DataFrame(parameter_sets)
             
-            # Generate complete dataset for this distortion level
+            # Generate dataset for this distortion level using successful indices
             dataset_dict = generate_complete_dataset_for_distortion_level(
-                feature_data=feature_data,
+                feature_data=baseline_features,
                 parameter_df=clean_parameter_df,
                 model_spec=model_spec,
                 model_builder=model_builder,
                 solver=solver,
                 distortion_factor=distortion_factor,
-                simulation_params=SIMULATION_PARAMS
+                simulation_params=SIMULATION_PARAMS,
+                success_indices=success_indices
             )
             
             # Save complete dataset to S3
@@ -708,6 +828,26 @@ def process_single_model(model_name, s3_manager):
             
             total_datasets += 1
             logger.info(f"✅ Completed distortion factor {distortion_factor}")
+        
+        # Save success indices and success rates for reference
+        if UPLOAD_S3 and s3_manager:
+            gen_path = s3_manager.save_result_path
+            folder_name = f"{model_name}_parameter_distortion_v2"
+            
+            # Save success indices
+            success_path = f"{gen_path}/data/{folder_name}/success_indices.pkl"
+            s3_manager.save_data_from_path(success_path, success_indices, data_format="pkl")
+            
+            # Save success rates per distortion level
+            success_rates = {}
+            for distortion_factor, success_mask in all_success_masks.items():
+                success_rates[distortion_factor] = success_mask.sum() / len(success_mask)
+            
+            rates_path = f"{gen_path}/data/{folder_name}/success_rates.pkl"
+            s3_manager.save_data_from_path(rates_path, success_rates, data_format="pkl")
+            
+            logger.info(f"✅ Saved success data to S3: {success_path}, {rates_path}")
+            logger.info(f"Success rates: {success_rates}")
         
         logger.info(f"✅ Successfully processed model {model_name}: {total_datasets} datasets created")
         return True

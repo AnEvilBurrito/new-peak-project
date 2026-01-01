@@ -20,10 +20,19 @@ def generate_baseline_virtual_models(
     solver,
     n_samples: int = 2000,
     seed: int = 42,
-    simulation_params: Dict[str, Any] = None
+    simulation_params: Dict[str, Any] = None,
+    perturbation_type: str = "lognormal",
+    perturbation_params: Dict[str, Any] = {"shape": 0.5},
+    param_perturbation_type: str = "lognormal",
+    param_perturbation_params: Dict[str, Any] = {"shape": 0.5},
+    param_seed_offset: int = 1,
+    require_all_successful: bool = False,
+    resample_size: int = 10,
+    max_retries: int = 3,
+    outcome_var: str = "Oa"
 ) -> Dict[str, Any]:
     """
-    Generate baseline virtual models using make_data_extended with lognormal perturbation.
+    Generate baseline virtual models using make_data_extended with configurable perturbation.
     
     This creates a population of "virtual models" with natural biological variation
     using the same approach as sy_simple-make-data-v1.py.
@@ -35,6 +44,15 @@ def generate_baseline_virtual_models(
         n_samples: Number of virtual models to generate
         seed: Random seed for reproducibility
         simulation_params: Simulation parameters (default: {'start': 0, 'end': 10000, 'points': 101})
+        perturbation_type: Type of perturbation for initial values (e.g., "lognormal", "uniform")
+        perturbation_params: Parameters for initial value perturbation
+        param_perturbation_type: Type of perturbation for kinetic parameters
+        param_perturbation_params: Parameters for kinetic parameter perturbation
+        param_seed_offset: Offset to create different seed for parameter perturbation
+        require_all_successful: Whether to require all samples to succeed
+        resample_size: Number of extra samples to generate for resampling
+        max_retries: Maximum number of retry attempts
+        outcome_var: Outcome variable to capture from simulations
         
     Returns:
         Dictionary containing:
@@ -60,26 +78,28 @@ def generate_baseline_virtual_models(
         simulation_params = {'start': 0, 'end': 10000, 'points': 101}
     
     logger.info(f"Generating baseline virtual models with {n_samples} samples...")
+    logger.info(f"  Perturbation type (initial values): {perturbation_type}")
+    logger.info(f"  Perturbation type (parameters): {param_perturbation_type}")
     
-    # Generate baseline dataset using lognormal perturbation for both features and parameters
+    # Generate baseline dataset using configurable perturbation
     baseline_data = make_data_extended(
         initial_values=initial_values,
-        perturbation_type="lognormal",
-        perturbation_params={"shape": 0.5},
+        perturbation_type=perturbation_type,
+        perturbation_params=perturbation_params,
         parameter_values=kinetic_parameters,
-        param_perturbation_type="lognormal",
-        param_perturbation_params={"shape": 0.5},
+        param_perturbation_type=param_perturbation_type,
+        param_perturbation_params=param_perturbation_params,
         n_samples=n_samples,
         model_spec=model_spec,
         solver=solver,
         simulation_params=simulation_params,
         seed=seed,
-        param_seed=seed + 1,  # Different seed for parameter perturbation
-        outcome_var="Oa",
+        param_seed=seed + param_seed_offset,
+        outcome_var=outcome_var,
         capture_all_species=True,
-        require_all_successful=False,  # Allow some failures with resampling
-        resample_size=10,
-        max_retries=3
+        require_all_successful=require_all_successful,
+        resample_size=resample_size,
+        max_retries=max_retries
     )
     
     # Extract components

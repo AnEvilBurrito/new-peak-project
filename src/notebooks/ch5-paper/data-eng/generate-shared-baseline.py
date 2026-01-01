@@ -36,8 +36,24 @@ N_SAMPLES = 2000
 SEED = 42
 SIMULATION_PARAMS = {'start': 0, 'end': 10000, 'points': 101}
 OUTCOME_VAR = "Oa"
+
+# Perturbation configuration for initial values (features)
+PERTURBATION_TYPE = "lognormal"
+PERTURBATION_PARAMS = {"shape": 0.5}
+
+# Perturbation configuration for kinetic parameters
+PARAM_PERTURBATION_TYPE = "lognormal"
+PARAM_PERTURBATION_PARAMS = {"shape": 0.2}
+
+# Additional baseline generation parameters
+PARAM_SEED_OFFSET = 1  # Different seed for parameter perturbation
+REQUIRE_ALL_SUCCESSFUL = False  # Allow some failures with resampling
+RESAMPLE_SIZE = 10  # Number of extra samples to generate for resampling
+MAX_RETRIES = 3  # Maximum number of retry attempts
+
 UPLOAD_S3 = True
 SEND_NOTIFICATIONS = True
+OVERWRITE = True  # Set to True to force regeneration even if baseline exists
 # ===== END CONFIGURATION =====
 
 
@@ -137,11 +153,17 @@ def process_single_model(model_name, s3_manager):
     try:
         logger.info(f"🚀 Starting shared baseline generation for model: {model_name}")
         
-        # Step 1: Check if baseline already exists
-        if check_existing_baseline(model_name, s3_manager):
+        # Step 1: Check if baseline already exists and handle OVERWRITE option
+        baseline_exists = check_existing_baseline(model_name, s3_manager)
+        
+        if baseline_exists and not OVERWRITE:
             logger.warning(f"⚠️ Baseline already exists for {model_name}. Skipping generation.")
-            logger.warning(f"   If you want to regenerate, delete the existing baseline from S3.")
+            logger.warning("   Set OVERWRITE=True to force regeneration.")
             return True  # Treat as success since baseline exists
+        elif baseline_exists and OVERWRITE:
+            logger.warning(f"⚠️ OVERWRITE=True: Existing baseline found for {model_name}. Regenerating...")
+        else:
+            logger.info(f"✅ No existing baseline found for {model_name}. Proceeding with generation.")
         
         # Step 2: Load model objects
         model_spec, model_builder, model_tuner = load_model_objects(model_name, s3_manager)
@@ -161,7 +183,16 @@ def process_single_model(model_name, s3_manager):
             solver=solver,
             n_samples=N_SAMPLES,
             seed=SEED,
-            simulation_params=SIMULATION_PARAMS
+            simulation_params=SIMULATION_PARAMS,
+            perturbation_type=PERTURBATION_TYPE,
+            perturbation_params=PERTURBATION_PARAMS,
+            param_perturbation_type=PARAM_PERTURBATION_TYPE,
+            param_perturbation_params=PARAM_PERTURBATION_PARAMS,
+            param_seed_offset=PARAM_SEED_OFFSET,
+            require_all_successful=REQUIRE_ALL_SUCCESSFUL,
+            resample_size=RESAMPLE_SIZE,
+            max_retries=MAX_RETRIES,
+            outcome_var=OUTCOME_VAR
         )
         
         logger.info(f"✅ Generated baseline with {len(baseline_data['features'])} virtual models")

@@ -50,13 +50,13 @@ logger = logging.getLogger(__name__)
 # MODIFY THESE VARIABLES FOR YOUR BATCH JOB
 MODEL_NAME = "sy_simple"  # Can be string: "sy_simple" or list: ["sy_simple", "model_v2"]
 DISTORTION_FACTORS = [0, 0.1, 0.2, 0.3, 0.5, 1.0]  # Multiplicative noise levels (fraction of parameter value for noise std)
-N_SAMPLES = 2000
+N_SAMPLES = 2000  # Reduced for testing
 SEED = 42
 SIMULATION_PARAMS = {'start': 0, 'end': 10000, 'points': 101}
 OUTCOME_VAR = "Oa"
-UPLOAD_S3 = True
-SEND_NOTIFICATIONS = True
-GENERATE_ML_TASK_LIST = True
+UPLOAD_S3 = True  # Disable S3 upload for testing
+SEND_NOTIFICATIONS = True  # Disable notifications for testing
+GENERATE_ML_TASK_LIST = True  # Disable ML task generation for testing
 # ===== END CONFIGURATION =====
 
 

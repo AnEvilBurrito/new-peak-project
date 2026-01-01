@@ -9,10 +9,13 @@ import sys
 import os
 import logging
 
-# Add src to path for imports
+# Add src to path for imports (from src/tests directory)
 current_dir = os.path.dirname(os.path.abspath(__file__))
-src_dir = os.path.join(current_dir, "../../..")
+src_dir = os.path.join(current_dir, "..")
 sys.path.insert(0, src_dir)
+
+# Path to the data-eng scripts directory
+data_eng_dir = os.path.join(src_dir, "notebooks", "ch5-paper", "data-eng")
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -23,7 +26,19 @@ def test_baseline_generator():
     logger.info("Testing baseline generator module...")
     
     try:
-        from baseline_generator import generate_baseline_virtual_models
+        # Import baseline_generator using importlib
+        import importlib.util
+        import sys
+        
+        # Get the path to baseline_generator.py
+        bg_path = os.path.join(data_eng_dir, "baseline_generator.py")
+        
+        # Load the module
+        spec = importlib.util.spec_from_file_location("baseline_generator", bg_path)
+        bg_module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(bg_module)
+        sys.modules["baseline_generator"] = bg_module
+        
         from models.utils.s3_config_manager import S3ConfigManager
         from models.Solver.RoadrunnerSolver import RoadrunnerSolver
         
@@ -47,7 +62,7 @@ def test_baseline_generator():
         solver.compile(model_builder.get_sbml_model())
         
         # Generate baseline virtual models with small sample size
-        baseline_data = generate_baseline_virtual_models(
+        baseline_data = bg_module.generate_baseline_virtual_models(
             model_spec=model_spec,
             model_builder=model_builder,
             solver=solver,
@@ -83,14 +98,21 @@ def test_parameter_distortion():
         import importlib.util
         import sys
         
+        # Add data_eng_dir to sys.path so ml_task_utils can be found
+        original_sys_path = sys.path.copy()
+        sys.path.insert(0, data_eng_dir)
+        
         # Get the path to parameter-distortion-v2.py
-        pd_path = os.path.join(current_dir, "parameter-distortion-v2.py")
+        pd_path = os.path.join(data_eng_dir, "parameter-distortion-v2.py")
         
         # Load the module
         spec = importlib.util.spec_from_file_location("parameter_distortion_v2", pd_path)
         pd_module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(pd_module)
         sys.modules["parameter_distortion_v2"] = pd_module
+        
+        # Restore sys.path
+        sys.path = original_sys_path
         
         # Temporarily modify configuration for testing
         original_samples = pd_module.N_SAMPLES
@@ -171,14 +193,21 @@ def test_expression_noise():
         import importlib.util
         import sys
         
+        # Add data_eng_dir to sys.path so ml_task_utils can be found
+        original_sys_path = sys.path.copy()
+        sys.path.insert(0, data_eng_dir)
+        
         # Get the path to expression-noise-v1.py
-        en_path = os.path.join(current_dir, "expression-noise-v1.py")
+        en_path = os.path.join(data_eng_dir, "expression-noise-v1.py")
         
         # Load the module
         spec = importlib.util.spec_from_file_location("expression_noise_v1", en_path)
         en_module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(en_module)
         sys.modules["expression_noise_v1"] = en_module
+        
+        # Restore sys.path
+        sys.path = original_sys_path
         
         # Temporarily modify configuration for testing
         original_samples = en_module.N_SAMPLES

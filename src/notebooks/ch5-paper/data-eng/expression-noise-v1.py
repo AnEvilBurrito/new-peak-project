@@ -134,14 +134,14 @@ class ExpressionNoiseTaskGenerator(BaseTaskGenerator):
         
     def get_target_files(self, noise_level):
         """Get target files for a given noise level"""
-        base_path = f"{self.get_base_folder()}/noise_{noise_level}"
+        # All noise levels should use the BASELINE targets (ground truth)
+        # from baseline virtual models for ML prediction tasks
+        base_path = f"{self.get_base_folder()}"
         
-        # For expression noise, we have both original_targets and targets
-        # Based on user requirements, use original_targets
         return [
             {
-                "path": f"{base_path}/original_targets.pkl",
-                "label": "original_targets"
+                "path": f"{base_path}/baseline_targets.pkl",
+                "label": "baseline_targets"
             }
         ]
 
@@ -615,6 +615,9 @@ def process_single_model(model_name, s3_manager):
     """
     Process a single model through the expression noise pipeline.
     
+    Uses baseline virtual models generated with lognormal perturbation (like sy_simple-make-data-v1.py)
+    and applies additional Gaussian noise to features only.
+    
     Args:
         model_name: Name of the model to process
         s3_manager: S3ConfigManager instance
@@ -632,40 +635,104 @@ def process_single_model(model_name, s3_manager):
         solver = RoadrunnerSolver()
         solver.compile(model_builder.get_sbml_model())
         
-        # Get initial values (inactive state variables)
-        state_variables = model_builder.get_state_variables()
-        initial_values = {k: v for k, v in state_variables.items() if not k.endswith('a')}
-        if 'O' in initial_values:
-            del initial_values['O']
+        # Step 1: Generate or load baseline virtual models
+        logger.info("Generating baseline virtual models with lognormal perturbation...")
+        from baseline_generator import generate_baseline_virtual_models
         
-        # Get original parameters
-        original_params = model_builder.get_parameters()
-        parameter_df = pd.DataFrame([original_params] * N_SAMPLES)
-        parameter_df['sample_id'] = range(N_SAMPLES)
+        baseline_data = generate_baseline_virtual_models(
+            model_spec=model_spec,
+            model_builder=model_builder,
+            solver=solver,
+            n_samples=N_SAMPLES,
+            seed=SEED,
+            simulation_params=SIMULATION_PARAMS
+        )
         
-        # Create clean parameter DataFrame for simulation (without metadata columns)
-        clean_parameter_df = pd.DataFrame([original_params] * N_SAMPLES)  # Only kinetic parameters
+        baseline_features = baseline_data['features']
+        baseline_targets = baseline_data['targets']
+        baseline_parameters = baseline_data['parameters']
         
-        # Generate base feature data (clean)
-        logger.info("Generating base (clean) feature data...")
-        base_feature_data = generate_base_feature_data(model_spec, initial_values, N_SAMPLES, SEED)
+        logger.info(f"Baseline features shape: {baseline_features.shape}")
+        logger.info(f"Baseline parameters shape: {baseline_parameters.shape}")
+        logger.info(f"Baseline targets shape: {baseline_targets.shape}")
         
-        # Process each noise level
+        # Save baseline for reference
+        if UPLOAD_S3 and s3_manager:
+            from baseline_generator import save_baseline_to_s3
+            baseline_paths = save_baseline_to_s3(
+                baseline_data, model_name, s3_manager, upload=UPLOAD_S3
+            )
+            logger.info(f"✅ Saved baseline virtual models to S3")
+        
+        # Step 2: Identify samples that succeed at ALL noise levels
+        logger.info("Identifying samples that succeed at ALL noise levels...")
+        all_success_masks = {}
+        
+        for noise_level in NOISE_LEVELS:
+            logger.info(f"Testing samples at noise level {noise_level}...")
+            
+            # Apply noise to baseline features
+            noisy_features = apply_expression_noise(
+                baseline_features, noise_level, SEED
+            )
+            
+            # Run simulation to get success mask
+            target_data, timecourse_data, success_mask = make_target_data_with_params_robust(
+                model_spec=model_spec,
+                solver=solver,
+                feature_df=noisy_features,
+                parameter_df=baseline_parameters,
+                simulation_params=SIMULATION_PARAMS,
+                n_cores=1,
+                outcome_var=OUTCOME_VAR,
+                capture_all_species=True,
+                verbose=False
+            )
+            
+            all_success_masks[noise_level] = success_mask
+        
+        # Find intersection of successful samples across ALL noise levels
+        success_intersection = pd.Series([True] * len(baseline_features))
+        for noise_level, success_mask in all_success_masks.items():
+            success_intersection = success_intersection & success_mask
+        
+        success_indices = success_intersection[success_intersection].index.tolist()
+        logger.info(f"Found {len(success_indices)} samples that succeed at ALL noise levels out of {len(baseline_features)} total")
+        
+        if len(success_indices) == 0:
+            logger.error("❌ No samples succeeded at all noise levels. Cannot proceed.")
+            return False
+        
+        # Step 3: Save baseline targets (ground truth) for ML tasks
+        if UPLOAD_S3 and s3_manager:
+            # Filter baseline targets to only successful samples
+            baseline_targets_filtered = baseline_targets.loc[success_indices].reset_index(drop=True)
+            
+            gen_path = s3_manager.save_result_path
+            folder_name = f"{model_name}_expression_noise_v1"
+            baseline_targets_path = f"{gen_path}/data/{folder_name}/baseline_targets.pkl"
+            s3_manager.save_data_from_path(baseline_targets_path, baseline_targets_filtered, data_format="pkl")
+            logger.info(f"✅ Saved baseline targets (ground truth) to S3: {baseline_targets_path}")
+        
+        # Step 4: Process each noise level
         total_datasets = 0
         for noise_level in NOISE_LEVELS:
             logger.info(f"Processing noise level: {noise_level}")
             
-            # Apply expression noise to feature data
+            # Apply expression noise to feature data (filtered to successful samples)
             logger.info(f"Applying Gaussian noise (level={noise_level}) to feature data...")
+            baseline_features_filtered = baseline_features.iloc[success_indices].reset_index(drop=True)
+            baseline_parameters_filtered = baseline_parameters.iloc[success_indices].reset_index(drop=True)
+            
             noisy_feature_data = apply_expression_noise(
-                base_feature_data, noise_level, SEED
+                baseline_features_filtered, noise_level, SEED
             )
             
             # Generate complete dataset for this noise level
             dataset_dict = generate_complete_dataset_for_noise_level(
-                base_feature_data=base_feature_data,
+                base_feature_data=baseline_features_filtered,
                 noisy_feature_data=noisy_feature_data,
-                parameter_df=clean_parameter_df,
+                parameter_df=baseline_parameters_filtered,
                 model_spec=model_spec,
                 model_builder=model_builder,
                 solver=solver,
@@ -678,6 +745,26 @@ def process_single_model(model_name, s3_manager):
             
             total_datasets += 1
             logger.info(f"✅ Completed noise level {noise_level}")
+        
+        # Save success indices and success rates for reference
+        if UPLOAD_S3 and s3_manager:
+            gen_path = s3_manager.save_result_path
+            folder_name = f"{model_name}_expression_noise_v1"
+            
+            # Save success indices
+            success_path = f"{gen_path}/data/{folder_name}/success_indices.pkl"
+            s3_manager.save_data_from_path(success_path, success_indices, data_format="pkl")
+            
+            # Save success rates per noise level
+            success_rates = {}
+            for noise_level, success_mask in all_success_masks.items():
+                success_rates[noise_level] = success_mask.sum() / len(success_mask)
+            
+            rates_path = f"{gen_path}/data/{folder_name}/success_rates.pkl"
+            s3_manager.save_data_from_path(rates_path, success_rates, data_format="pkl")
+            
+            logger.info(f"✅ Saved success data to S3: {success_path}, {rates_path}")
+            logger.info(f"Success rates: {success_rates}")
         
         logger.info(f"✅ Successfully processed model {model_name}: {total_datasets} datasets created")
         return True

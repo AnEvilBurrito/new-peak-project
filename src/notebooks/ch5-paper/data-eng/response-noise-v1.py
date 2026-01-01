@@ -47,7 +47,7 @@ logger = logging.getLogger(__name__)
 # ===== CONFIGURATION SECTION =====
 # MODIFY THESE VARIABLES FOR YOUR BATCH JOB
 MODEL_NAME = "sy_simple"  # Can be string: "sy_simple" or list: ["sy_simple", "model_v2"]
-NOISE_LEVELS = [0, 0.05, 0.1, 0.2, 0.3, 0.5]
+NOISE_LEVELS = [0, 0.1, 0.2, 0.3, 0.5, 1.0]
 N_SAMPLES = 2000
 SEED = 42
 SIMULATION_PARAMS = {'start': 0, 'end': 10000, 'points': 101}
@@ -265,25 +265,26 @@ def make_target_data_with_params_robust(
 
 def apply_response_noise(target_data, noise_level, seed):
     """
-    Apply Gaussian noise to response target data
-    
+    Apply Gaussian noise where noise scale is relative to each value
+
     Args:
         target_data: Original target data DataFrame
-        noise_level: Standard deviation of Gaussian noise
+        noise_level: Fraction of each value's magnitude to use as noise std
         seed: Random seed for reproducibility
-    
-    Returns:
-        Target data with applied noise
     """
+    if noise_level == 0:
+        return target_data.copy()
     rng = default_rng(seed)
-    
-    # Apply noise to each column independently
+
     noisy_target_data = target_data.copy()
     for column in target_data.columns:
         original_values = target_data[column].values
-        noise = rng.normal(0, noise_level * np.std(original_values), len(original_values))
+        # Noise std = noise_level × absolute value
+        noise_std = np.abs(original_values) * noise_level
+        # Generate different noise for each point with its own std
+        noise = rng.normal(0, noise_std)
         noisy_target_data[column] = original_values + noise
-    
+
     return noisy_target_data
 
 

@@ -49,7 +49,7 @@ logger = logging.getLogger(__name__)
 # ===== CONFIGURATION SECTION =====
 # MODIFY THESE VARIABLES FOR YOUR BATCH JOB
 MODEL_NAME = "sy_simple"  # Can be string: "sy_simple" or list: ["sy_simple", "model_v2"]
-DISTORTION_FACTORS = [0, 0.1, 0.5]  # Multiplicative noise levels (fraction of parameter value for noise std)
+DISTORTION_FACTORS = [0, 0.1, 0.2, 0.3, 0.5, 1.0]  # Multiplicative noise levels (fraction of parameter value for noise std)
 N_SAMPLES = 50  # Reduced for testing
 SEED = 42
 SIMULATION_PARAMS = {'start': 0, 'end': 10000, 'points': 101}

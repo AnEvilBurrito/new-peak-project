@@ -29,7 +29,7 @@
 
 # %%
 # Configuration variables - simplified for one model and one experiment
-EXPERIMENT_TYPE = "response-noise-v1"  # Single experiment type
+EXPERIMENT_TYPE = "parameter-distortion-v2"  # Single experiment type
 MODEL_NAME = "sy_simple"  # Single model name
 
 # Experiment type mapping to perturbation column names
@@ -37,6 +37,19 @@ PERTURBATION_MAPPING = {
     "expression-noise-v1": "Expression Noise Level",
     "parameter-distortion-v2": "Distortion Factor", 
     "response-noise-v1": "Response Noise Level"
+}
+
+# Perturbation level configurations
+PERTURBATION_LEVELS = {
+    "expression-noise-v1": [0.0, 0.1, 0.2, 0.3, 0.5, 1.0],
+    "response-noise-v1": [0.0, 0.1, 0.2, 0.3, 0.5, 1.0],
+    "parameter-distortion-v2": [0, 0.1, 0.5],
+}
+
+# Common level patterns for detection in feature labels
+LEVEL_PATTERNS = {
+    "noise": ["noise_{level}", "_{level}"],
+    "distortion": ["distortion_{level}", "_{level}"]
 }
 
 # Visualization settings
@@ -151,6 +164,91 @@ def clean_feature_label(feature_label: str) -> str:
     
     return label
 
+def detect_perturbation_level(label: str, experiment_type: str) -> Optional[float]:
+    """
+    Detect perturbation level from feature label using configuration-based approach.
+    
+    Args:
+        label: Feature label string
+        experiment_type: Type of experiment (e.g., "expression-noise-v1")
+        
+    Returns:
+        Detected perturbation level as float, or None if not found
+    """
+    import re
+    
+    label_lower = label.lower()
+    normalized_experiment_type = experiment_type.replace('-', '_')
+    
+    # Get configured levels for this experiment type
+    configured_levels = PERTURBATION_LEVELS.get(experiment_type, [])
+    
+    # Method 1: Try to match exact configured levels first
+    for level in configured_levels:
+        # Check for common patterns
+        patterns = [
+            f"_{level}",
+            f"noise_{level}",
+            f"distortion_{level}",
+            f"_{level}_",
+        ]
+        
+        for pattern in patterns:
+            if pattern in label_lower:
+                return float(level)
+    
+    # Method 2: Extract all numbers from label and try to match
+    numbers = re.findall(r'(\d+(?:\.\d+)?)', label)
+    if numbers:
+        nums = [float(n) for n in numbers]
+        
+        # For noise experiments, look for numbers in configured levels
+        if normalized_experiment_type in ["expression_noise_v1", "response_noise_v1"]:
+            for num in nums:
+                # Check if this number is close to any configured level
+                for level in configured_levels:
+                    if abs(num - level) < 0.001:
+                        return float(level)
+            
+            # If no exact match, use the smallest positive number
+            positive_nums = [n for n in nums if n >= 0]
+            if positive_nums:
+                return float(min(positive_nums))
+        
+        # For distortion experiments, look for numbers >= 1.0
+        elif normalized_experiment_type == "parameter_distortion_v2":
+            distortion_nums = [n for n in nums if n >= 1.0]
+            if distortion_nums:
+                # Try to match configured distortion factors
+                for num in distortion_nums:
+                    for level in configured_levels:
+                        if abs(num - level) < 0.001:
+                            return float(level)
+                
+                # If no exact match, use the smallest distortion number
+                return float(min(distortion_nums))
+    
+    # Method 3: Fallback to regex pattern matching for common cases
+    # This handles edge cases not covered by configuration
+    if "noise_0" in label_lower or "_0" in label_lower:
+        return 0.0
+    elif any(f"_0.{i}" in label_lower for i in [1, 2, 3, 5]):
+        for i in [1, 2, 3, 5]:
+            if f"_0.{i}" in label_lower or f"noise_0.{i}" in label_lower:
+                return float(f"0.{i}")
+    elif "_1.0" in label_lower or "noise_1.0" in label_lower:
+        return 1.0
+    elif any(f"_1.{i}" in label_lower for i in [1, 3, 5]):
+        for i in [1, 3, 5]:
+            if f"_1.{i}" in label_lower or f"distortion_1.{i}" in label_lower:
+                return float(f"1.{i}")
+    elif "_2.0" in label_lower or "distortion_2.0" in label_lower:
+        return 2.0
+    elif "_3.0" in label_lower or "distortion_3.0" in label_lower:
+        return 3.0
+    
+    return None
+
 def extract_perturbation_level_and_feature_type(results_df: pd.DataFrame, experiment_type: str) -> pd.DataFrame:
     """
     Extract perturbation level and clean feature type from feature data labels.
@@ -167,104 +265,15 @@ def extract_perturbation_level_and_feature_type(results_df: pd.DataFrame, experi
     perturbation_levels = []
     feature_types = []
     
-    # Common noise levels for expression noise experiments
-    EXPRESSION_NOISE_LEVELS = [0, 0.1, 0.2, 0.3, 0.5, 1.0]
-    
-    # Normalize experiment type for comparison (handle both hyphen and underscore formats)
-    normalized_experiment_type = experiment_type.replace('-', '_')
-    
     for idx, feature_label in enumerate(df["Feature Data"]):
-        level = None
         label = str(feature_label)
         
         # Debug: Show first few labels to understand format
         if idx < 3:
             print(f"  Sample label {idx}: '{label}'")
         
-        # Method 1: Look for numeric values in feature label with better pattern matching
-        import re
-        
-        # Try to find patterns like "_0", "_0.1", "_1.0", "noise_0", "noise_1.0"
-        # Look for numbers with optional decimal points
-        numbers = re.findall(r'(\d+(?:\.\d+)?)', label)
-        
-        if numbers:
-            # Convert to floats
-            nums = [float(n) for n in numbers]
-            
-            # Check for expression noise experiments (handles both hyphen and underscore formats)
-            if normalized_experiment_type in ["expression_noise_v1", "response_noise_v1"]:
-                # Try to match exact noise levels first
-                for noise_level in EXPRESSION_NOISE_LEVELS:
-                    # Check if this noise level appears in the numbers
-                    if any(abs(n - noise_level) < 0.001 for n in nums):
-                        level = noise_level
-                        break
-                
-                # If no exact match, use the smallest positive number
-                if level is None:
-                    positive_nums = [n for n in nums if n >= 0]
-                    if positive_nums:
-                        level = min(positive_nums)
-                        
-            elif normalized_experiment_type == "parameter_distortion_v2":
-                # For distortion, look for numbers > 1.0
-                distortion_nums = [n for n in nums if n >= 1.0]
-                if distortion_nums:
-                    # Common distortion factors
-                    common_factors = [1.1, 1.3, 1.5, 2.0, 3.0]
-                    for factor in common_factors:
-                        if any(abs(n - factor) < 0.001 for n in distortion_nums):
-                            level = factor
-                            break
-                    if level is None:
-                        level = min(distortion_nums)
-        
-        # Method 2: Direct pattern matching for common labels
-        if level is None:
-            label_lower = label.lower()
-            
-            # Check for exact noise level patterns
-            if normalized_experiment_type in ["expression_noise_v1", "response_noise_v1"]:
-                for noise_level in EXPRESSION_NOISE_LEVELS:
-                    # Look for patterns like "_0.1", "noise_0.1", etc.
-                    patterns = [
-                        f"_{noise_level}",
-                        f"noise_{noise_level}",
-                        f"_{noise_level}_",  # Some labels might have additional underscores
-                    ]
-                    
-                    for pattern in patterns:
-                        if pattern in label_lower:
-                            level = noise_level
-                            break
-                    if level is not None:
-                        break
-            
-            # Also check for common shorthand patterns
-            if level is None:
-                if "noise_0" in label_lower or "_0" in label_lower:
-                    level = 0.0
-                elif "noise_0.1" in label_lower or "_0.1" in label_lower:
-                    level = 0.1
-                elif "noise_0.2" in label_lower or "_0.2" in label_lower:
-                    level = 0.2
-                elif "noise_0.3" in label_lower or "_0.3" in label_lower:
-                    level = 0.3
-                elif "noise_0.5" in label_lower or "_0.5" in label_lower:
-                    level = 0.5
-                elif "noise_1.0" in label_lower or "_1.0" in label_lower:
-                    level = 1.0
-                elif "distortion_1.1" in label_lower or "_1.1" in label_lower:
-                    level = 1.1
-                elif "distortion_1.3" in label_lower or "_1.3" in label_lower:
-                    level = 1.3
-                elif "distortion_1.5" in label_lower or "_1.5" in label_lower:
-                    level = 1.5
-                elif "distortion_2.0" in label_lower or "_2.0" in label_lower:
-                    level = 2.0
-                elif "distortion_3.0" in label_lower or "_3.0" in label_lower:
-                    level = 3.0
+        # Use the new configuration-based detection function
+        level = detect_perturbation_level(label, experiment_type)
         
         # Clean feature type
         feature_type = clean_feature_label(label)
@@ -337,6 +346,10 @@ else:
     # Show first few rows
     print("\n📄 Data preview:")
     print(data_df.head())
+
+# %%
+data_df
+
 
 # %% [markdown]
 # ## Visualizations

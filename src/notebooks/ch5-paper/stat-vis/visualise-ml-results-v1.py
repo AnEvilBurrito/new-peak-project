@@ -29,7 +29,7 @@
 
 # %%
 # Configuration variables - simplified for one model and one experiment
-EXPERIMENT_TYPE = "expression-noise-v1"  # Single experiment type
+EXPERIMENT_TYPE = "response-noise-v1"  # Single experiment type
 MODEL_NAME = "sy_simple"  # Single model name
 
 # Experiment type mapping to perturbation column names
@@ -37,19 +37,6 @@ PERTURBATION_MAPPING = {
     "expression-noise-v1": "Expression Noise Level",
     "parameter-distortion-v2": "Distortion Factor", 
     "response-noise-v1": "Response Noise Level"
-}
-
-# Perturbation level configurations
-PERTURBATION_LEVELS = {
-    "expression-noise-v1": [0.0, 0.1, 0.2, 0.3, 0.5, 1.0],
-    "response-noise-v1": [0.0, 0.1, 0.2, 0.3, 0.5, 1.0],
-    "parameter-distortion-v2": [0, 0.1, 0.5],
-}
-
-# Common level patterns for detection in feature labels
-LEVEL_PATTERNS = {
-    "noise": ["noise_{level}", "_{level}"],
-    "distortion": ["distortion_{level}", "_{level}"]
 }
 
 # Visualization settings

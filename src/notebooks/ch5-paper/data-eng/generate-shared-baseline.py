@@ -43,7 +43,7 @@ PERTURBATION_PARAMS = {"shape": 0.5}
 
 # Perturbation configuration for kinetic parameters
 PARAM_PERTURBATION_TYPE = "lognormal"
-PARAM_PERTURBATION_PARAMS = {"shape": 0.2}
+PARAM_PERTURBATION_PARAMS = {"shape": 0.1}
 
 # Additional baseline generation parameters
 PARAM_SEED_OFFSET = 1  # Different seed for parameter perturbation

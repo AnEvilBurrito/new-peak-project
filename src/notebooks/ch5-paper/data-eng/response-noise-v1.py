@@ -711,7 +711,7 @@ def process_single_model(model_name, s3_manager):
         
         # Step 4: Process each noise level with filtered successful samples
         total_datasets = 0
-        for noise_level in NOISE_LEVELS:
+        for idx, noise_level in enumerate(NOISE_LEVELS):
             logger.info(f"Processing noise level: {noise_level}")
             
             # Apply response noise to target data (filtered to successful samples)
@@ -720,8 +720,12 @@ def process_single_model(model_name, s3_manager):
             baseline_features_filtered = baseline_features.loc[success_indices].reset_index(drop=True)
             baseline_parameters_filtered = baseline_parameters.loc[success_indices].reset_index(drop=True)
             
+            # Generate unique seed for each noise level to ensure independent noise patterns
+            # Using different seeds prevents correlated noise where only magnitude differs
+            noise_seed = SEED + idx * 1000
+            
             noisy_target_data = apply_response_noise(
-                baseline_targets_filtered, noise_level, SEED
+                baseline_targets_filtered, noise_level, noise_seed
             )
             
             # Generate complete dataset for this noise level using pre-computed baseline dynamics

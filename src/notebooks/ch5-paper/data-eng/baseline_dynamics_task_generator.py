@@ -45,10 +45,12 @@ class BaselineDynamicsTaskGenerator(BaseTaskGenerator):
         """
         Get feature files for baseline data.
         
-        Returns three feature types:
+        Returns five feature types:
         1. Original features from baseline virtual models
-        2. Dynamic features calculated from baseline timecourses
-        3. Last time points calculated from baseline timecourses
+        2. Dynamic features with outcome variable
+        3. Last time points with outcome variable
+        4. Dynamic features without outcome variable
+        5. Last time points without outcome variable
         """
         base_path = self.get_base_folder()
         
@@ -58,12 +60,20 @@ class BaselineDynamicsTaskGenerator(BaseTaskGenerator):
                 "label": "original_features"
             },
             {
-                "path": f"{base_path}/dynamic_features.pkl",
-                "label": "dynamic_features"
+                "path": f"{base_path}/dynamic_features_with_outcome.pkl",
+                "label": "dynamic_features_with_outcome"
             },
             {
-                "path": f"{base_path}/last_time_points.pkl",
-                "label": "last_time_points"
+                "path": f"{base_path}/last_time_points_with_outcome.pkl",
+                "label": "last_time_points_with_outcome"
+            },
+            {
+                "path": f"{base_path}/dynamic_features_no_outcome.pkl",
+                "label": "dynamic_features_no_outcome"
+            },
+            {
+                "path": f"{base_path}/last_time_points_no_outcome.pkl",
+                "label": "last_time_points_no_outcome"
             }
         ]
         

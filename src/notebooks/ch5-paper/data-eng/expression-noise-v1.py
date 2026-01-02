@@ -102,33 +102,30 @@ class ExpressionNoiseTaskGenerator(BaseTaskGenerator):
         
         feature_files = [
             {
-                "path": f"{base_path}/noisy_features.pkl",
-                "label": f"noisy_features_{noise_level}"
+            "path": f"{base_path}/noisy_features.pkl",
+            "label": f"noisy_features_{noise_level}"
             },
             {
-                "path": f"{base_path}/dynamic_features.pkl", 
-                "label": f"dynamic_features_{noise_level}"
+            "path": f"{base_path}/dynamic_features.pkl", 
+            "label": f"dynamic_features_{noise_level}"
             },
             {
-                "path": f"{base_path}/dynamic_features_no_outcome.pkl",
-                "label": f"dynamic_features_no_outcome_{noise_level}"
+            "path": f"{base_path}/dynamic_features_no_outcome.pkl",
+            "label": f"dynamic_features_no_outcome_{noise_level}"
             },
             {
-                "path": f"{base_path}/last_time_points.pkl",
-                "label": f"last_time_points_{noise_level}"
+            "path": f"{base_path}/last_time_points.pkl",
+            "label": f"last_time_points_{noise_level}"
             },
             {
-                "path": f"{base_path}/last_time_points_no_outcome.pkl",
-                "label": f"last_time_points_no_outcome_{noise_level}"
+            "path": f"{base_path}/last_time_points_no_outcome.pkl",
+            "label": f"last_time_points_no_outcome_{noise_level}"
+            },
+            {
+            "path": f"{base_path}/original_features.pkl",
+            "label": f"original_features_{noise_level}"
             }
         ]
-        
-        # Also include original features for comparison at noise_level=0
-        if noise_level == 0:
-            feature_files.append({
-                "path": f"{base_path}/original_features.pkl",
-                "label": "original_features_0"
-            })
             
         return feature_files
         
@@ -182,33 +179,6 @@ def apply_expression_noise(feature_data, noise_level, seed):
         noisy_feature_data[column] = np.maximum(noisy_values, 0)
 
     return noisy_feature_data
-
-
-def generate_base_feature_data(model_spec, initial_values, n_samples=N_SAMPLES, seed=SEED):
-    """
-    Generate base feature data using lhs perturbation
-    
-    Args:
-        model_spec: ModelSpecification instance
-        initial_values: Dictionary of initial values (inactive state variables)
-        n_samples: Number of samples (from configuration)
-        seed: Random seed (from configuration)
-    
-    Returns:
-        DataFrame of feature data
-    """
-    from models.utils.make_feature_data import make_feature_data
-    
-    feature_data = make_feature_data(
-        initial_values=initial_values,
-        perturbation_type='lhs',
-        perturbation_params={'min': 0.1, 'max': 10.0},  # Using default range
-        n_samples=n_samples,
-        seed=seed
-    )
-    
-    logger.info(f"Generated base feature data with shape: {feature_data.shape}")
-    return feature_data
 
 
 def make_target_data_with_params_robust(
@@ -391,9 +361,7 @@ def generate_complete_dataset_for_noise_level(
     
     # Calculate dynamic features
     logger.info("Calculating dynamic features...")
-    initial_values = {k: v for k, v in model_builder.get_state_variables().items() if not k.endswith('a')}
-    if 'O' in initial_values:
-        del initial_values['O']
+    initial_values = {k: v for k, v in model_builder.get_state_variables().items() if k.endswith('a')}
     
     dynamic_features = dynamic_features_method(
         timecourse_data, 
@@ -408,8 +376,11 @@ def generate_complete_dataset_for_noise_level(
     )
     
     # Calculate dynamic features without outcome
-    states_no_outcome = {k: v for k, v in model_builder.get_state_variables().items() 
-                        if k not in ['Oa', 'O']}
+    states_no_outcome = {k: v for k, v in model_builder.get_state_variables().items() if k.endswith('a')}
+    if 'O' in states_no_outcome:
+        del states_no_outcome['O']
+    if 'Oa' in states_no_outcome:
+        del states_no_outcome['Oa']
     dynamic_features_no_outcome = dynamic_features_method(
         timecourse_data, 
         selected_features=states_no_outcome.keys(), 

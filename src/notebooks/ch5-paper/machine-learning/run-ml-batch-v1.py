@@ -38,7 +38,7 @@ CSV_PATH = None  # Set to None for auto-discovery, or provide custom path: "path
 # When CSV_PATH is provided, the script will load the specified CSV file
 
 # Experiment selection
-EXPERIMENT_TYPES = ["expression_noise_v1"]  # List of experiment types to process
+EXPERIMENT_TYPES = ["response-noise-v1"]  # List of experiment types to process
 # EXPERIMENT_TYPES = ["expression-noise-v1", "parameter-distortion-v2"]  # Multiple experiments
 # EXPERIMENT_TYPES = None  # Process ALL experiments in CSV
 
@@ -50,7 +50,7 @@ MODEL_NAMES = ["sy_simple"]  # List of model names to process
 # IMPORTANT: For auto-discovery (CSV_PATH=None), MODEL_NAMES must be specified as a list
 
 # Evaluation parameters
-NUM_REPEATS = 10     # Number of random train/test splits
+NUM_REPEATS = 5     # Number of random train/test splits
 TEST_SIZE = 0.2      # Proportion of data for testing
 RANDOM_SEED = 42     # Random seed for reproducibility
 N_JOBS = -1          # Number of parallel jobs (-1 for all cores)

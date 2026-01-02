@@ -443,10 +443,7 @@ def generate_complete_dataset_for_distortion_level(
     
     # Calculate dynamic features
     logger.info("Calculating dynamic features...")
-    initial_values = {k: v for k, v in model_builder.get_state_variables().items() if not k.endswith('a')}
-    if 'O' in initial_values:
-        del initial_values['O']
-    
+    initial_values = {k: v for k, v in model_builder.get_state_variables().items() if k.endswith('a')}
     dynamic_features = dynamic_features_method(
         timecourse_data, 
         selected_features=initial_values.keys(), 
@@ -460,8 +457,12 @@ def generate_complete_dataset_for_distortion_level(
     )
     
     # Calculate dynamic features without outcome
-    states_no_outcome = {k: v for k, v in model_builder.get_state_variables().items() 
-                        if k not in ['Oa', 'O']}
+    states_no_outcome = {k: v for k, v in model_builder.get_state_variables().items() if k.endswith('a')}
+    if 'O' in states_no_outcome:
+        del states_no_outcome['O']
+    if 'Oa' in states_no_outcome:
+        del states_no_outcome['Oa']
+        
     dynamic_features_no_outcome = dynamic_features_method(
         timecourse_data, 
         selected_features=states_no_outcome.keys(), 

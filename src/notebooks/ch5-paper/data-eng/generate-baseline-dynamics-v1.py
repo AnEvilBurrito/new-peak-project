@@ -102,40 +102,78 @@ def load_baseline_data(model_name, s3_manager):
 
 def calculate_dynamic_features(timecourse_data, model_builder):
     """
-    Calculate dynamic features from timecourse data.
+    Calculate dynamic features from timecourse data (both with and without outcome variable).
     
     Args:
         timecourse_data: Timecourse data from baseline virtual models
         model_builder: ModelBuilder instance for state variable information
     
     Returns:
-        Tuple of (dynamic_features, last_time_points)
+        Tuple of (dynamic_features_with_outcome, last_time_points_with_outcome,
+                 dynamic_features_no_outcome, last_time_points_no_outcome)
     """
-    logger.info("Calculating dynamic features from timecourses...")
+    logger.info("Calculating dynamic features from timecourses (with and without outcome)...")
     
-    # Get state variables (excluding outcome variable)
-    initial_values = {k: v for k, v in model_builder.get_state_variables().items() if not k.endswith('a')}
-    if 'O' in initial_values:
-        del initial_values['O']
+    # Get all state variables ending with 'a' (active state variables)
+    all_state_vars = {k: v for k, v in model_builder.get_state_variables().items() if k.endswith('a')}
     
-    # Calculate dynamic features
-    dynamic_features = dynamic_features_method(
+    # Calculate dynamic features for ALL variables (including outcome)
+    logger.info("Calculating dynamic features...")
+    all_dynamic_features = dynamic_features_method(
         timecourse_data, 
-        selected_features=initial_values.keys(), 
+        selected_features=list(all_state_vars.keys()), 
         n_cores=1, 
         verbose=False
     )
     
-    # Calculate last time points
-    last_time_points = last_time_point_method(
+    # Calculate last time points for ALL variables (including outcome)
+    all_last_time_points = last_time_point_method(
         timecourse_data, 
-        selected_species=initial_values.keys()
+        selected_species=list(all_state_vars.keys())
     )
     
-    logger.info(f"Dynamic features shape: {dynamic_features.shape}")
-    logger.info(f"Last time points shape: {last_time_points.shape}")
+    # Extract base variable names from dynamic features columns
+    # Split on the last underscore to get base variable name
+    def get_base_variable_name(column_name):
+        # Split on underscore and remove the suffix (last part after last underscore)
+        parts = column_name.split('_')
+        if len(parts) > 1:
+            # Join all parts except the last one (the suffix)
+            return '_'.join(parts[:-1])
+        return column_name
     
-    return dynamic_features, last_time_points
+    # Get unique base variables from dynamic features columns
+    dynamic_features_columns = all_dynamic_features.columns
+    base_variables = set(get_base_variable_name(col) for col in dynamic_features_columns)
+    
+    # Filter for variables WITHOUT outcome
+    base_variables_no_outcome = {var for var in base_variables 
+                                 if var not in ['O', 'Oa']}
+    
+    # Filter columns for no outcome version
+    columns_with_outcome = [col for col in dynamic_features_columns]
+    columns_no_outcome = [col for col in dynamic_features_columns 
+                         if get_base_variable_name(col) in base_variables_no_outcome]
+    
+    # Filter last time points columns
+    last_time_points_columns = all_last_time_points.columns
+    last_time_points_columns_no_outcome = [col for col in last_time_points_columns 
+                                         if col not in ['O', 'Oa']]
+    
+    # Create filtered DataFrames
+    dynamic_features_with_outcome = all_dynamic_features[columns_with_outcome]
+    dynamic_features_no_outcome = all_dynamic_features[columns_no_outcome]
+    
+    last_time_points_with_outcome = all_last_time_points
+    last_time_points_no_outcome = all_last_time_points[last_time_points_columns_no_outcome]
+    
+    logger.info(f"Dynamic features (with outcome) shape: {dynamic_features_with_outcome.shape}")
+    logger.info(f"Last time points (with outcome) shape: {last_time_points_with_outcome.shape}")
+    logger.info(f"Dynamic features (no outcome) shape: {dynamic_features_no_outcome.shape}")
+    logger.info(f"Last time points (no outcome) shape: {last_time_points_no_outcome.shape}")
+    
+    return (dynamic_features_with_outcome, last_time_points_with_outcome,
+            dynamic_features_no_outcome, last_time_points_no_outcome)
 
 
 def load_model_objects(model_name, s3_manager):
@@ -162,20 +200,24 @@ def load_model_objects(model_name, s3_manager):
     return model_builder
 
 
-def save_baseline_dynamics_data(baseline_data, dynamic_features, last_time_points, model_name, s3_manager):
+def save_baseline_dynamics_data(baseline_data, dynamic_features_tuple, model_name, s3_manager):
     """
-    Save baseline dynamics datasets to S3.
+    Save baseline dynamics datasets to S3 (with and without outcome versions).
     
     Args:
         baseline_data: Baseline data from generate-shared-baseline.py
-        dynamic_features: Calculated dynamic features DataFrame
-        last_time_points: Calculated last time points DataFrame
+        dynamic_features_tuple: Tuple of (dynamic_features_with_outcome, last_time_points_with_outcome,
+                                         dynamic_features_no_outcome, last_time_points_no_outcome)
         model_name: Name of the model
         s3_manager: S3ConfigManager instance
     """
     if not UPLOAD_S3:
         logger.info(f"Skipping S3 upload for model {model_name}")
         return
+    
+    # Unpack the tuple
+    (dynamic_features_with_outcome, last_time_points_with_outcome,
+     dynamic_features_no_outcome, last_time_points_no_outcome) = dynamic_features_tuple
     
     gen_path = s3_manager.save_result_path
     folder_name = f"{model_name}_baseline_dynamics_v1"
@@ -199,21 +241,37 @@ def save_baseline_dynamics_data(baseline_data, dynamic_features, last_time_point
     )
     logger.info(f"✅ Saved baseline targets to S3: {full_path}/baseline_targets.pkl")
     
-    # Save dynamic features
+    # Save dynamic features WITH outcome
     s3_manager.save_data_from_path(
-        f"{full_path}/dynamic_features.pkl", 
-        dynamic_features, 
+        f"{full_path}/dynamic_features_with_outcome.pkl", 
+        dynamic_features_with_outcome, 
         data_format="pkl"
     )
-    logger.info(f"✅ Saved dynamic features to S3: {full_path}/dynamic_features.pkl")
+    logger.info(f"✅ Saved dynamic features (with outcome) to S3: {full_path}/dynamic_features_with_outcome.pkl")
     
-    # Save last time points
+    # Save last time points WITH outcome
     s3_manager.save_data_from_path(
-        f"{full_path}/last_time_points.pkl", 
-        last_time_points, 
+        f"{full_path}/last_time_points_with_outcome.pkl", 
+        last_time_points_with_outcome, 
         data_format="pkl"
     )
-    logger.info(f"✅ Saved last time points to S3: {full_path}/last_time_points.pkl")
+    logger.info(f"✅ Saved last time points (with outcome) to S3: {full_path}/last_time_points_with_outcome.pkl")
+    
+    # Save dynamic features WITHOUT outcome
+    s3_manager.save_data_from_path(
+        f"{full_path}/dynamic_features_no_outcome.pkl", 
+        dynamic_features_no_outcome, 
+        data_format="pkl"
+    )
+    logger.info(f"✅ Saved dynamic features (no outcome) to S3: {full_path}/dynamic_features_no_outcome.pkl")
+    
+    # Save last time points WITHOUT outcome
+    s3_manager.save_data_from_path(
+        f"{full_path}/last_time_points_no_outcome.pkl", 
+        last_time_points_no_outcome, 
+        data_format="pkl"
+    )
+    logger.info(f"✅ Saved last time points (no outcome) to S3: {full_path}/last_time_points_no_outcome.pkl")
     
     # Save timecourses (optional, for reference)
     if baseline_data.get('timecourses') is not None:
@@ -229,9 +287,16 @@ def save_baseline_dynamics_data(baseline_data, dynamic_features, last_time_point
         'model_name': model_name,
         'n_samples': len(original_features),
         'generation_timestamp': datetime.now().isoformat(),
-        'feature_types': ['original_features', 'dynamic_features', 'last_time_points'],
+        'feature_types': [
+            'original_features', 
+            'dynamic_features_with_outcome', 
+            'last_time_points_with_outcome',
+            'dynamic_features_no_outcome', 
+            'last_time_points_no_outcome'
+        ],
         'source_baseline': f"{model_name}_baseline_virtual_models",
-        'script_version': 'generate-baseline-dynamics-v1.py'
+        'script_version': 'generate-baseline-dynamics-v1.py',
+        'outcome_variable_included': 'Oa' if 'Oa' in dynamic_features_with_outcome.columns.str.split('_').str[0].unique() else 'unknown'
     }
     
     s3_manager.save_data_from_path(
@@ -345,16 +410,16 @@ def process_single_model(model_name, s3_manager):
         timecourse_data = baseline_data.get('timecourses')
         if timecourse_data is None:
             logger.warning(f"No timecourse data found for {model_name}. Skipping dynamic feature calculation.")
-            dynamic_features = pd.DataFrame()
-            last_time_points = pd.DataFrame()
+            # Create empty tuple for consistency
+            dynamic_features_tuple = (pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame())
         else:
-            dynamic_features, last_time_points = calculate_dynamic_features(timecourse_data, model_builder)
+            # Now returns 4-tuple: (with_outcome_dyn, with_outcome_last, no_outcome_dyn, no_outcome_last)
+            dynamic_features_tuple = calculate_dynamic_features(timecourse_data, model_builder)
         
         # Step 4: Save baseline dynamics datasets to S3
         save_baseline_dynamics_data(
             baseline_data, 
-            dynamic_features, 
-            last_time_points, 
+            dynamic_features_tuple, 
             model_name, 
             s3_manager
         )

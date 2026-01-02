@@ -265,12 +265,15 @@ def make_target_data_with_params_robust(
 
 def apply_response_noise(target_data, noise_level, seed):
     """
-    Apply Gaussian noise where noise scale is relative to each value
+    Apply multiplicative Gaussian noise: x' = x × (1 + ε), ε ~ N(0, noise_level)
 
     Args:
         target_data: Original target data DataFrame
-        noise_level: Fraction of each value's magnitude to use as noise std
+        noise_level: Standard deviation of relative error (e.g., 0.1 = 10%)
         seed: Random seed for reproducibility
+
+    Returns:
+        Noisy target data (clipped at zero to ensure non‑negative values)
     """
     if noise_level == 0:
         return target_data.copy()
@@ -279,12 +282,16 @@ def apply_response_noise(target_data, noise_level, seed):
     noisy_target_data = target_data.copy()
     for column in target_data.columns:
         original_values = target_data[column].values
-        # Noise std = noise_level × absolute value
-        noise_std = np.abs(original_values) * noise_level
-        # Generate different noise for each point with its own std
-        noise = rng.normal(0, noise_std)
-        noisy_target_data[column] = original_values + noise
-
+        
+        # Generate relative noise: ε ~ N(0, noise_level)
+        relative_noise = rng.normal(0, noise_level, len(original_values))
+        
+        # Apply multiplicative noise: x' = x × (1 + ε)
+        noisy_values = original_values * (1 + relative_noise)
+        
+        # Ensure non‑negative values (concentrations cannot be negative)
+        noisy_target_data[column] = np.maximum(noisy_values, 0)
+    
     return noisy_target_data
 
 

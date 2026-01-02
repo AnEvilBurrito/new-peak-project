@@ -145,39 +145,35 @@ class ExpressionNoiseTaskGenerator(BaseTaskGenerator):
 
 def apply_expression_noise(feature_data, noise_level, seed):
     """
-    Apply Gaussian noise to expression feature data
+    Apply multiplicative Gaussian noise to expression feature data:
+    x' = x × (1 + ε), ε ~ N(0, noise_level)
 
     Args:
         feature_data: Original feature data DataFrame
-        noise_level: Standard deviation of Gaussian noise as fraction of each value
+        noise_level: Standard deviation of relative error (e.g., 0.1 = 10%)
         seed: Random seed for reproducibility
 
     Returns:
-        Feature data with applied noise
+        Feature data with applied noise (clipped at zero)
     """
-    # Handle baseline case (noise_level == 0) - return original data unchanged
     if noise_level == 0:
-        return feature_data.copy()  # No noise for baseline
+        return feature_data.copy()
 
     rng = default_rng(seed)
 
-    # Apply noise to each column independently
     noisy_feature_data = feature_data.copy()
     for column in feature_data.columns:
         original_values = feature_data[column].values
-
-        # Relative noise: noise std = noise_level × absolute value
-        # Add small epsilon to handle zeros
-        epsilon = 1e-6
-        noise_std = np.abs(original_values) * noise_level + epsilon
-
-        # Generate noise for each point with its own std
-        noise = rng.normal(0, noise_std)
-
-        # Apply noise and ensure no negative values
-        noisy_values = original_values + noise
+        
+        # Generate relative noise: ε ~ N(0, noise_level)
+        relative_noise = rng.normal(0, noise_level, len(original_values))
+        
+        # Apply multiplicative noise: x' = x × (1 + ε)
+        noisy_values = original_values * (1 + relative_noise)
+        
+        # Ensure non‑negative values (expression levels cannot be negative)
         noisy_feature_data[column] = np.maximum(noisy_values, 0)
-
+    
     return noisy_feature_data
 
 

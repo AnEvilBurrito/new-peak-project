@@ -140,16 +140,15 @@ class ParameterDistortionTaskGenerator(BaseTaskGenerator):
 
 def apply_gaussian_distortion(original_params, distortion_factor, seed=42):
     """
-    Apply multiplicative Gaussian noise to parameters with scale-proportional distortion.
+    Apply multiplicative Gaussian noise to parameters: p' = p × (1 + ε), ε ~ N(0, distortion_factor)
     
     Args:
         original_params: Dictionary of original parameters from model_builder
-        distortion_factor: Controls strength of distortion (0 = no distortion)
-                         Interpreted as fraction of parameter value for noise std
+        distortion_factor: Standard deviation of relative error (e.g., 0.1 = 10%)
         seed: Random seed for reproducible distortion
     
     Returns:
-        Dictionary of distorted parameters
+        Dictionary of distorted parameters (clipped at 1e-8 to ensure positivity)
     """
     if distortion_factor == 0:
         return original_params  # No distortion for baseline
@@ -158,11 +157,14 @@ def apply_gaussian_distortion(original_params, distortion_factor, seed=42):
     distorted_params = {}
     
     for key, value in original_params.items():
-        # Apply multiplicative Gaussian noise with std = distortion_factor * value
-        # This ensures noise scales proportionally with parameter magnitude
-        noise_std = distortion_factor * abs(value)
-        noise = rng.normal(loc=0, scale=noise_std)
-        distorted_params[key] = max(value + noise, 1e-8)  # Ensure non-negative
+        # Generate relative noise: ε ~ N(0, distortion_factor)
+        relative_noise = rng.normal(loc=0, scale=distortion_factor)
+        
+        # Apply multiplicative noise: p' = p × (1 + ε)
+        distorted_value = value * (1 + relative_noise)
+        
+        # Ensure non-negative (parameters must be positive)
+        distorted_params[key] = max(distorted_value, 1e-8)
     
     return distorted_params
 

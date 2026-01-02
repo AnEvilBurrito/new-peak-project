@@ -13,7 +13,7 @@ from numpy.random import default_rng
 
 # Add src to path
 current_dir = os.path.dirname(os.path.abspath(__file__))
-src_dir = os.path.join(current_dir, "../..")
+src_dir = os.path.dirname(os.path.dirname(current_dir))
 sys.path.insert(0, src_dir)
 
 
@@ -59,7 +59,7 @@ def test_noise_independence():
         'target2': np.random.uniform(5, 15, n_samples),
     })
     
-    # Configuration matching the script
+    # Configuration matching the script (excluding 0 to avoid division by zero in normalization)
     SEED = 42
     NOISE_LEVELS = [0.1, 0.2, 0.3, 0.5, 1.0]
     

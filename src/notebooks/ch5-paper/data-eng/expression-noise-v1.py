@@ -102,33 +102,30 @@ class ExpressionNoiseTaskGenerator(BaseTaskGenerator):
         
         feature_files = [
             {
-                "path": f"{base_path}/noisy_features.pkl",
-                "label": f"noisy_features_{noise_level}"
+            "path": f"{base_path}/noisy_features.pkl",
+            "label": f"noisy_features_{noise_level}"
             },
             {
-                "path": f"{base_path}/dynamic_features.pkl", 
-                "label": f"dynamic_features_{noise_level}"
+            "path": f"{base_path}/dynamic_features.pkl", 
+            "label": f"dynamic_features_{noise_level}"
             },
             {
-                "path": f"{base_path}/dynamic_features_no_outcome.pkl",
-                "label": f"dynamic_features_no_outcome_{noise_level}"
+            "path": f"{base_path}/dynamic_features_no_outcome.pkl",
+            "label": f"dynamic_features_no_outcome_{noise_level}"
             },
             {
-                "path": f"{base_path}/last_time_points.pkl",
-                "label": f"last_time_points_{noise_level}"
+            "path": f"{base_path}/last_time_points.pkl",
+            "label": f"last_time_points_{noise_level}"
             },
             {
-                "path": f"{base_path}/last_time_points_no_outcome.pkl",
-                "label": f"last_time_points_no_outcome_{noise_level}"
+            "path": f"{base_path}/last_time_points_no_outcome.pkl",
+            "label": f"last_time_points_no_outcome_{noise_level}"
+            },
+            {
+            "path": f"{base_path}/original_features.pkl",
+            "label": f"original_features_{noise_level}"
             }
         ]
-        
-        # Also include original features for comparison at noise_level=0
-        if noise_level == 0:
-            feature_files.append({
-                "path": f"{base_path}/original_features.pkl",
-                "label": "original_features_0"
-            })
             
         return feature_files
         
@@ -182,33 +179,6 @@ def apply_expression_noise(feature_data, noise_level, seed):
         noisy_feature_data[column] = np.maximum(noisy_values, 0)
 
     return noisy_feature_data
-
-
-def generate_base_feature_data(model_spec, initial_values, n_samples=N_SAMPLES, seed=SEED):
-    """
-    Generate base feature data using lhs perturbation
-    
-    Args:
-        model_spec: ModelSpecification instance
-        initial_values: Dictionary of initial values (inactive state variables)
-        n_samples: Number of samples (from configuration)
-        seed: Random seed (from configuration)
-    
-    Returns:
-        DataFrame of feature data
-    """
-    from models.utils.make_feature_data import make_feature_data
-    
-    feature_data = make_feature_data(
-        initial_values=initial_values,
-        perturbation_type='lhs',
-        perturbation_params={'min': 0.1, 'max': 10.0},  # Using default range
-        n_samples=n_samples,
-        seed=seed
-    )
-    
-    logger.info(f"Generated base feature data with shape: {feature_data.shape}")
-    return feature_data
 
 
 def make_target_data_with_params_robust(
@@ -391,9 +361,7 @@ def generate_complete_dataset_for_noise_level(
     
     # Calculate dynamic features
     logger.info("Calculating dynamic features...")
-    initial_values = {k: v for k, v in model_builder.get_state_variables().items() if not k.endswith('a')}
-    if 'O' in initial_values:
-        del initial_values['O']
+    initial_values = {k: v for k, v in model_builder.get_state_variables().items() if k.endswith('a')}
     
     dynamic_features = dynamic_features_method(
         timecourse_data, 
@@ -408,8 +376,11 @@ def generate_complete_dataset_for_noise_level(
     )
     
     # Calculate dynamic features without outcome
-    states_no_outcome = {k: v for k, v in model_builder.get_state_variables().items() 
-                        if k not in ['Oa', 'O']}
+    states_no_outcome = {k: v for k, v in model_builder.get_state_variables().items() if k.endswith('a')}
+    if 'O' in states_no_outcome:
+        del states_no_outcome['O']
+    if 'Oa' in states_no_outcome:
+        del states_no_outcome['Oa']
     dynamic_features_no_outcome = dynamic_features_method(
         timecourse_data, 
         selected_features=states_no_outcome.keys(), 
@@ -621,11 +592,54 @@ def generate_csv_task_list():
         return pd.DataFrame()
 
 
+def check_baseline_exists(model_name, s3_manager):
+    """
+    Check if shared baseline exists and validate it has enough samples.
+    
+    Args:
+        model_name: Name of the model
+        s3_manager: S3ConfigManager instance
+    
+    Returns:
+        Tuple of (baseline_data, baseline_samples_count) if baseline exists and is valid
+        Raises RuntimeError if baseline doesn't exist or doesn't have enough samples
+    """
+    try:
+        from baseline_generator import load_baseline_from_s3
+        baseline_data = load_baseline_from_s3(model_name, s3_manager)
+        
+        # Check if we have the essential components
+        if (baseline_data.get('features') is None or 
+            baseline_data.get('targets') is None):
+            raise RuntimeError(f"Incomplete baseline found for {model_name}. Missing essential components.")
+        
+        baseline_samples = len(baseline_data['features'])
+        logger.info(f"✅ Shared baseline found for {model_name} with {baseline_samples} samples")
+        
+        # Validate that baseline has enough samples for our N_SAMPLES configuration
+        if baseline_samples < N_SAMPLES:
+            raise RuntimeError(
+                f"Baseline has only {baseline_samples} samples, but N_SAMPLES={N_SAMPLES}. "
+                f"Either regenerate baseline with more samples or reduce N_SAMPLES."
+            )
+        
+        return baseline_data, baseline_samples
+        
+    except Exception as e:
+        if "Could not load" in str(e) or "No such file" in str(e):
+            raise RuntimeError(
+                f"❌ Shared baseline not found for model {model_name}. "
+                f"Please run generate-shared-baseline.py first to create the baseline."
+            )
+        else:
+            raise RuntimeError(f"❌ Error loading baseline for {model_name}: {e}")
+
+
 def process_single_model(model_name, s3_manager):
     """
     Process a single model through the expression noise pipeline.
     
-    Uses baseline virtual models generated with lognormal perturbation (like sy_simple-make-data-v1.py)
+    Uses SHARED baseline virtual models loaded from S3 (generated by generate-shared-baseline.py)
     and applies additional Gaussian noise to features only.
     
     Args:
@@ -645,34 +659,22 @@ def process_single_model(model_name, s3_manager):
         solver = RoadrunnerSolver()
         solver.compile(model_builder.get_sbml_model())
         
-        # Step 1: Generate or load baseline virtual models
-        logger.info("Generating baseline virtual models with lognormal perturbation...")
-        from baseline_generator import generate_baseline_virtual_models
+        # Step 1: Load shared baseline virtual models (FAIL FAST if missing)
+        logger.info("Loading shared baseline virtual models from S3...")
+        baseline_data, baseline_samples = check_baseline_exists(model_name, s3_manager)
         
-        baseline_data = generate_baseline_virtual_models(
-            model_spec=model_spec,
-            model_builder=model_builder,
-            solver=solver,
-            n_samples=N_SAMPLES,
-            seed=SEED,
-            simulation_params=SIMULATION_PARAMS
-        )
-        
-        baseline_features = baseline_data['features']
-        baseline_targets = baseline_data['targets']
+        # Use first N_SAMPLES from baseline (or all if N_SAMPLES > baseline_samples)
+        # Note: check_baseline_exists already validated N_SAMPLES <= baseline_samples
+        baseline_features = baseline_data['features'].iloc[:N_SAMPLES].reset_index(drop=True)
+        baseline_targets = baseline_data['targets'].iloc[:N_SAMPLES].reset_index(drop=True)
         baseline_parameters = baseline_data['parameters']
+        if baseline_parameters is not None:
+            baseline_parameters = baseline_parameters.iloc[:N_SAMPLES].reset_index(drop=True)
         
+        logger.info(f"✅ Using {N_SAMPLES} samples from shared baseline ({baseline_samples} total available)")
         logger.info(f"Baseline features shape: {baseline_features.shape}")
-        logger.info(f"Baseline parameters shape: {baseline_parameters.shape}")
+        logger.info(f"Baseline parameters shape: {baseline_parameters.shape if baseline_parameters is not None else 'N/A'}")
         logger.info(f"Baseline targets shape: {baseline_targets.shape}")
-        
-        # Save baseline for reference
-        if UPLOAD_S3 and s3_manager:
-            from baseline_generator import save_baseline_to_s3
-            baseline_paths = save_baseline_to_s3(
-                baseline_data, model_name, s3_manager, upload=UPLOAD_S3
-            )
-            logger.info(f"✅ Saved baseline virtual models to S3")
         
         # Step 2: Identify samples that succeed at ALL noise levels
         logger.info("Identifying samples that succeed at ALL noise levels...")

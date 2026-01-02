@@ -292,58 +292,41 @@ def generate_complete_dataset_for_noise_level(
     clean_dataset,
     noisy_target_data,
     noise_level,
-    model_builder,
-    solver
+    baseline_dynamics
 ):
     """
-    Generate complete dataset for a specific noise level
+    Generate complete dataset for a specific noise level using pre-computed baseline dynamics.
     
     Args:
         clean_dataset: Dictionary containing clean dataset components from make_data_extended
         noisy_target_data: Target data with applied noise
         noise_level: Current noise level
-        solver: Solver instance
+        baseline_dynamics: Dictionary containing pre-computed baseline dynamics:
+            - dynamic_features_with_outcome
+            - last_time_points_with_outcome
+            - dynamic_features_no_outcome
+            - last_time_points_no_outcome
     
     Returns:
         Dictionary containing all dataset components
     """
-    logger.info(f"Generating complete dataset for noise level {noise_level}")
+    logger.info(f"Generating complete dataset for noise level {noise_level} using baseline dynamics")
     
     # Use timecourse data from clean dataset
     timecourse_data = clean_dataset['timecourse']
     
-    # Calculate dynamic features from clean timecourse
-    logger.info("Calculating dynamic features...")
-    initial_values = {k: v for k, v in model_builder.get_state_variables().items() if not k.endswith('a')}
-    if 'O' in initial_values:
-        del initial_values['O']
+    # Use pre-computed dynamic features from baseline dynamics
+    logger.info("Using pre-computed dynamic features from baseline dynamics...")
     
-    dynamic_features = dynamic_features_method(
-        timecourse_data, 
-        selected_features=initial_values.keys(), 
-        n_cores=1, 
-        verbose=False
-    )
+    dynamic_features = baseline_dynamics['dynamic_features_with_outcome']
+    last_time_points = baseline_dynamics['last_time_points_with_outcome']
+    dynamic_features_no_outcome = baseline_dynamics['dynamic_features_no_outcome']
+    last_time_points_no_outcome = baseline_dynamics['last_time_points_no_outcome']
     
-    last_time_points = last_time_point_method(
-        timecourse_data, 
-        selected_species=initial_values.keys()
-    )
-    
-    # Calculate dynamic features without outcome
-    states_no_outcome = {k: v for k, v in model_builder.get_state_variables().items() 
-                        if k not in ['Oa', 'O']}
-    dynamic_features_no_outcome = dynamic_features_method(
-        timecourse_data, 
-        selected_features=states_no_outcome.keys(), 
-        n_cores=1, 
-        verbose=False
-    )
-    
-    last_time_points_no_outcome = last_time_point_method(
-        timecourse_data, 
-        selected_species=states_no_outcome.keys()
-    )
+    logger.info(f"Dynamic features shape: {dynamic_features.shape}")
+    logger.info(f"Last time points shape: {last_time_points.shape}")
+    logger.info(f"Dynamic features (no outcome) shape: {dynamic_features_no_outcome.shape}")
+    logger.info(f"Last time points (no outcome) shape: {last_time_points_no_outcome.shape}")
     
     return {
         'features': clean_dataset['features'],
@@ -444,6 +427,81 @@ def load_model_objects(model_name, s3_manager):
     return model_spec, model_builder, model_tuner
 
 
+def load_baseline_dynamics(model_name, s3_manager, success_indices=None):
+    """
+    Load baseline dynamics data from S3 (with and without outcome versions).
+    
+    Args:
+        model_name: Name of the model
+        s3_manager: S3ConfigManager instance
+        success_indices: Optional list of indices to filter baseline dynamics to match successful samples
+    
+    Returns:
+        Dictionary containing baseline dynamics components:
+        - dynamic_features_with_outcome
+        - last_time_points_with_outcome
+        - dynamic_features_no_outcome
+        - last_time_points_no_outcome
+    """
+    gen_path = s3_manager.save_result_path
+    folder_name = f"{model_name}_baseline_dynamics_v1"
+    full_path = f"{gen_path}/data/{folder_name}"
+    
+    logger.info(f"Loading baseline dynamics for model: {model_name}")
+    
+    try:
+        # Load all four baseline dynamics files
+        dynamic_features_with_outcome = s3_manager.load_data_from_path(
+            f"{full_path}/dynamic_features_with_outcome.pkl", 
+            data_format='pkl'
+        )
+        
+        last_time_points_with_outcome = s3_manager.load_data_from_path(
+            f"{full_path}/last_time_points_with_outcome.pkl", 
+            data_format='pkl'
+        )
+        
+        dynamic_features_no_outcome = s3_manager.load_data_from_path(
+            f"{full_path}/dynamic_features_no_outcome.pkl", 
+            data_format='pkl'
+        )
+        
+        last_time_points_no_outcome = s3_manager.load_data_from_path(
+            f"{full_path}/last_time_points_no_outcome.pkl", 
+            data_format='pkl'
+        )
+        
+        # Filter to success indices if provided
+        if success_indices is not None:
+            logger.info(f"Filtering baseline dynamics to {len(success_indices)} successful samples")
+            dynamic_features_with_outcome = dynamic_features_with_outcome.iloc[success_indices].reset_index(drop=True)
+            last_time_points_with_outcome = last_time_points_with_outcome.iloc[success_indices].reset_index(drop=True)
+            dynamic_features_no_outcome = dynamic_features_no_outcome.iloc[success_indices].reset_index(drop=True)
+            last_time_points_no_outcome = last_time_points_no_outcome.iloc[success_indices].reset_index(drop=True)
+        
+        logger.info(f"✅ Loaded baseline dynamics for {model_name}")
+        logger.info(f"  dynamic_features_with_outcome shape: {dynamic_features_with_outcome.shape}")
+        logger.info(f"  last_time_points_with_outcome shape: {last_time_points_with_outcome.shape}")
+        logger.info(f"  dynamic_features_no_outcome shape: {dynamic_features_no_outcome.shape}")
+        logger.info(f"  last_time_points_no_outcome shape: {last_time_points_no_outcome.shape}")
+        
+        return {
+            'dynamic_features_with_outcome': dynamic_features_with_outcome,
+            'last_time_points_with_outcome': last_time_points_with_outcome,
+            'dynamic_features_no_outcome': dynamic_features_no_outcome,
+            'last_time_points_no_outcome': last_time_points_no_outcome
+        }
+        
+    except Exception as e:
+        if "Could not load" in str(e) or "No such file" in str(e):
+            raise RuntimeError(
+                f"❌ Baseline dynamics not found for model {model_name}. "
+                f"Please run generate-baseline-dynamics-v1.py first to create baseline dynamics."
+            )
+        else:
+            raise RuntimeError(f"❌ Error loading baseline dynamics for {model_name}: {e}")
+
+
 def generate_csv_task_list():
     """
     Generate CSV task list for response noise experiments.
@@ -468,7 +526,7 @@ def generate_csv_task_list():
     all_task_rows = []
     
     # Initialize S3 manager if UPLOAD_S3 is True
-    s3_manager = S3ConfigManager() if UPLOAD_S3 else None
+    s3_manager_instance = S3ConfigManager() if UPLOAD_S3 else None
     
     for model_name in model_names:
         logger.info(f"Generating tasks for model: {model_name}")
@@ -503,13 +561,13 @@ def generate_csv_task_list():
         task_df = pd.DataFrame(all_task_rows)
         
         # Upload to S3 if enabled
-        if UPLOAD_S3 and s3_manager:
+        if UPLOAD_S3 and s3_manager_instance:
             output_csv = "task_list.csv"
             folder_name = generator.get_base_folder() if 'generator' in locals() else f"{model_names[0]}_response_noise_v1"
-            gen_path = s3_manager.save_result_path
+            gen_path = s3_manager_instance.save_result_path
             s3_csv_path = f"{gen_path}/data/{folder_name}/{output_csv}"
             
-            s3_manager.save_data_from_path(s3_csv_path, task_df, data_format="csv")
+            s3_manager_instance.save_data_from_path(s3_csv_path, task_df, data_format="csv")
             logger.info(f"✅ Uploaded CSV to S3: {s3_csv_path}")
             
             if len(model_names) > 1:
@@ -524,11 +582,54 @@ def generate_csv_task_list():
         return pd.DataFrame()
 
 
+def check_baseline_exists(model_name, s3_manager):
+    """
+    Check if shared baseline exists and validate it has enough samples.
+    
+    Args:
+        model_name: Name of the model
+        s3_manager: S3ConfigManager instance
+    
+    Returns:
+        Tuple of (baseline_data, baseline_samples_count) if baseline exists and is valid
+        Raises RuntimeError if baseline doesn't exist or doesn't have enough samples
+    """
+    try:
+        from baseline_generator import load_baseline_from_s3
+        baseline_data = load_baseline_from_s3(model_name, s3_manager)
+        
+        # Check if we have the essential components
+        if (baseline_data.get('features') is None or 
+            baseline_data.get('targets') is None):
+            raise RuntimeError(f"Incomplete baseline found for {model_name}. Missing essential components.")
+        
+        baseline_samples = len(baseline_data['features'])
+        logger.info(f"✅ Shared baseline found for {model_name} with {baseline_samples} samples")
+        
+        # Validate that baseline has enough samples for our N_SAMPLES configuration
+        if baseline_samples < N_SAMPLES:
+            raise RuntimeError(
+                f"Baseline has only {baseline_samples} samples, but N_SAMPLES={N_SAMPLES}. "
+                f"Either regenerate baseline with more samples or reduce N_SAMPLES."
+            )
+        
+        return baseline_data, baseline_samples
+        
+    except Exception as e:
+        if "Could not load" in str(e) or "No such file" in str(e):
+            raise RuntimeError(
+                f"❌ Shared baseline not found for model {model_name}. "
+                f"Please run generate-shared-baseline.py first to create the baseline."
+            )
+        else:
+            raise RuntimeError(f"❌ Error loading baseline for {model_name}: {e}")
+
+
 def process_single_model(model_name, s3_manager):
     """
     Process a single model through the response noise pipeline.
     
-    Uses baseline virtual models generated with lognormal perturbation (like sy_simple-make-data-v1.py)
+    Uses SHARED baseline virtual models loaded from S3 (generated by generate-shared-baseline.py)
     and applies Gaussian noise to target data only (response measurement noise).
     
     Args:
@@ -548,35 +649,25 @@ def process_single_model(model_name, s3_manager):
         solver = RoadrunnerSolver()
         solver.compile(model_builder.get_sbml_model())
         
-        # Step 1: Generate or load baseline virtual models
-        logger.info("Generating baseline virtual models with lognormal perturbation...")
-        from baseline_generator import generate_baseline_virtual_models
+        # Step 1: Load shared baseline virtual models (FAIL FAST if missing)
+        logger.info("Loading shared baseline virtual models from S3...")
+        baseline_data, baseline_samples = check_baseline_exists(model_name, s3_manager)
         
-        baseline_data = generate_baseline_virtual_models(
-            model_spec=model_spec,
-            model_builder=model_builder,
-            solver=solver,
-            n_samples=N_SAMPLES,
-            seed=SEED,
-            simulation_params=SIMULATION_PARAMS
-        )
-        
-        baseline_features = baseline_data['features']
-        baseline_targets = baseline_data['targets']
+        # Use first N_SAMPLES from baseline (or all if N_SAMPLES > baseline_samples)
+        # Note: check_baseline_exists already validated N_SAMPLES <= baseline_samples
+        baseline_features = baseline_data['features'].iloc[:N_SAMPLES].reset_index(drop=True)
+        baseline_targets = baseline_data['targets'].iloc[:N_SAMPLES].reset_index(drop=True)
         baseline_parameters = baseline_data['parameters']
-        baseline_timecourses = baseline_data['timecourses']
+        if baseline_parameters is not None:
+            baseline_parameters = baseline_parameters.iloc[:N_SAMPLES].reset_index(drop=True)
         
+        # Get timecourses if available
+        baseline_timecourses = baseline_data.get('timecourses')
+        
+        logger.info(f"✅ Using {N_SAMPLES} samples from shared baseline ({baseline_samples} total available)")
         logger.info(f"Baseline features shape: {baseline_features.shape}")
-        logger.info(f"Baseline parameters shape: {baseline_parameters.shape}")
+        logger.info(f"Baseline parameters shape: {baseline_parameters.shape if baseline_parameters is not None else 'N/A'}")
         logger.info(f"Baseline targets shape: {baseline_targets.shape}")
-        
-        # Save baseline for reference
-        if UPLOAD_S3 and s3_manager:
-            from baseline_generator import save_baseline_to_s3
-            baseline_paths = save_baseline_to_s3(
-                baseline_data, model_name, s3_manager, upload=UPLOAD_S3
-            )
-            logger.info(f"✅ Saved baseline virtual models to S3")
         
         # Step 2: Identify samples that succeed at ALL noise levels
         # For response noise, we're only adding noise to targets, so all samples should succeed
@@ -584,7 +675,6 @@ def process_single_model(model_name, s3_manager):
         logger.info("Verifying all samples succeed with baseline parameters...")
         
         # Run a quick simulation to check for any CVODE errors
-        from models.utils.data_generation_helpers import make_target_data_with_params
         _, _, success_mask = make_target_data_with_params_robust(
             model_spec=model_spec,
             solver=solver,
@@ -615,6 +705,10 @@ def process_single_model(model_name, s3_manager):
             s3_manager.save_data_from_path(baseline_targets_path, baseline_targets_filtered, data_format="pkl")
             logger.info(f"✅ Saved baseline targets (ground truth) to S3: {baseline_targets_path}")
         
+        # Step 3.5: Load baseline dynamics data for successful samples
+        logger.info("Loading baseline dynamics data...")
+        baseline_dynamics = load_baseline_dynamics(model_name, s3_manager, success_indices)
+        
         # Step 4: Process each noise level with filtered successful samples
         total_datasets = 0
         for noise_level in NOISE_LEVELS:
@@ -630,7 +724,7 @@ def process_single_model(model_name, s3_manager):
                 baseline_targets_filtered, noise_level, SEED
             )
             
-            # Generate complete dataset for this noise level
+            # Generate complete dataset for this noise level using pre-computed baseline dynamics
             dataset_dict = generate_complete_dataset_for_noise_level(
                 clean_dataset={
                     'features': baseline_features_filtered,
@@ -641,8 +735,7 @@ def process_single_model(model_name, s3_manager):
                 },
                 noisy_target_data=noisy_target_data,
                 noise_level=noise_level,
-                model_builder=model_builder,
-                solver=solver
+                baseline_dynamics=baseline_dynamics
             )
             
             # Save complete dataset to S3

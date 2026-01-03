@@ -136,133 +136,6 @@ class ResponseNoiseTaskGenerator(BaseTaskGenerator):
         ]
 
 
-def make_target_data_with_params_robust(
-    model_spec,
-    solver,
-    feature_df,
-    parameter_df,
-    simulation_params,
-    n_cores=1,
-    outcome_var='Oa',
-    capture_all_species=True,
-    verbose=False
-):
-    """
-    Robust version of make_target_data_with_params that handles CVODE errors
-    by removing failed samples and maintaining data alignment
-    
-    Returns:
-        Tuple of (target_df, timecourse_data, success_mask)
-        where success_mask is boolean array indicating which samples succeeded
-    """
-    logger.info("Running robust simulation with CVODE error handling...")
-    
-    # First, try to run the standard function
-    try:
-        target_data, timecourse_data = make_target_data_with_params(
-            model_spec=model_spec,
-            solver=solver,
-            feature_df=feature_df,
-            parameter_df=parameter_df,
-            simulation_params=simulation_params,
-            n_cores=n_cores,
-            outcome_var=outcome_var,
-            capture_all_species=capture_all_species,
-            verbose=verbose
-        )
-        
-        # If successful, return all data with success_mask indicating all succeeded
-        success_mask = pd.Series([True] * len(target_data), index=target_data.index)
-        return target_data, timecourse_data, success_mask
-        
-    except RuntimeError as e:
-        # Check if this is a CVODE error
-        if "CV_TOO_MUCH_WORK" in str(e) or "CVODE" in str(e):
-            logger.warning(f"CVODE error detected: {str(e)[:100]}...")
-            logger.info("Falling back to robust sequential simulation with error handling")
-            
-            # Initialize result containers
-            all_targets = []
-            all_timecourses = []
-            success_indices = []
-            
-            # Get simulation parameters
-            start = simulation_params['start']
-            end = simulation_params['end']
-            points = simulation_params['points']
-            
-            # Sequential simulation with error handling
-            for i in tqdm(range(feature_df.shape[0]), desc='Robust simulation', disable=not verbose):
-                try:
-                    # Get values for this sample
-                    feature_values = feature_df.iloc[i].to_dict()
-                    param_values = parameter_df.iloc[i].to_dict() if parameter_df is not None else None
-                    
-                    # Set values in solver
-                    solver.set_state_values(feature_values)
-                    if param_values is not None:
-                        solver.set_parameter_values(param_values)
-                    
-                    # Run simulation
-                    res = solver.simulate(start, end, points)
-                    
-                    # Extract results
-                    target_value = res[outcome_var].iloc[-1]
-                    
-                    if capture_all_species:
-                        # Capture all species
-                        timecourse = {}
-                        for col in res.columns:
-                            if col != 'time':
-                                timecourse[col] = res[col].values
-                        all_timecourses.append(timecourse)
-                    else:
-                        # Capture only outcome variable
-                        all_timecourses.append(res[outcome_var].values)
-                    
-                    all_targets.append(target_value)
-                    success_indices.append(i)
-                    
-                except RuntimeError as sim_error:
-                    # Check if this is a CVODE error
-                    if "CV_TOO_MUCH_WORK" in str(sim_error) or "CVODE" in str(sim_error):
-                        logger.debug(f"Sample {i} failed with CVODE error: {str(sim_error)[:50]}")
-                        continue  # Skip this sample
-                    else:
-                        # Re-raise unexpected errors
-                        raise
-                except Exception as sim_error:
-                    logger.debug(f"Sample {i} failed with error: {str(sim_error)[:50]}")
-                    continue  # Skip this sample
-            
-            # Create success mask
-            success_mask = pd.Series([False] * feature_df.shape[0])
-            success_mask.iloc[success_indices] = True
-            
-            # Create target DataFrame
-            target_data = pd.DataFrame(all_targets, columns=[outcome_var])
-            target_data.index = success_indices
-            
-            # Create timecourse DataFrame if capture_all_species
-            if capture_all_species and all_timecourses:
-                timecourse_data = pd.DataFrame(all_timecourses)
-                timecourse_data.index = success_indices
-            else:
-                timecourse_data = all_timecourses  # List of arrays
-            
-            logger.info(f"Robust simulation completed: {len(success_indices)}/{feature_df.shape[0]} samples succeeded")
-            
-            return target_data, timecourse_data, success_mask
-            
-        else:
-            # Re-raise non-CVODE errors
-            raise
-            
-    except Exception as e:
-        # Re-raise other errors
-        raise
-
-
 def apply_response_noise(target_data, noise_level, seed):
     """
     Apply multiplicative Gaussian noise: x' = x × (1 + ε), ε ~ N(0, noise_level)
@@ -319,8 +192,6 @@ def generate_complete_dataset_for_noise_level(
     """
     logger.info(f"Generating complete dataset for noise level {noise_level} using baseline dynamics")
     
-    # Use timecourse data from clean dataset
-    timecourse_data = clean_dataset['timecourse']
     
     # Use pre-computed dynamic features from baseline dynamics
     logger.info("Using pre-computed dynamic features from baseline dynamics...")
@@ -340,7 +211,6 @@ def generate_complete_dataset_for_noise_level(
         'clean_targets': clean_dataset['targets'],
         'noisy_targets': noisy_target_data,
         'parameters': clean_dataset['parameters'],
-        'timecourses': timecourse_data,
         'dynamic_features': dynamic_features,
         'last_time_points': last_time_points,
         'dynamic_features_no_outcome': dynamic_features_no_outcome,
@@ -373,7 +243,6 @@ def save_complete_dataset(dataset_dict, noise_level, model_name, s3_manager):
         'clean_targets': 'clean_targets.pkl',
         'noisy_targets': 'noisy_targets.pkl',
         'parameters': 'parameter_sets.pkl',
-        'timecourses': 'timecourses.pkl',
         'dynamic_features': 'dynamic_features.pkl',
         'last_time_points': 'last_time_points.pkl',
         'dynamic_features_no_outcome': 'dynamic_features_no_outcome.pkl',
@@ -434,14 +303,16 @@ def load_model_objects(model_name, s3_manager):
     return model_spec, model_builder, model_tuner
 
 
-def load_baseline_dynamics(model_name, s3_manager, success_indices=None):
+def load_baseline_dynamics(model_name, s3_manager):
     """
     Load baseline dynamics data from S3 (with and without outcome versions).
+    
+    Baseline dynamics data is already aligned with successful samples from baseline generation,
+    so no additional filtering is needed.
     
     Args:
         model_name: Name of the model
         s3_manager: S3ConfigManager instance
-        success_indices: Optional list of indices to filter baseline dynamics to match successful samples
     
     Returns:
         Dictionary containing baseline dynamics components:
@@ -477,14 +348,6 @@ def load_baseline_dynamics(model_name, s3_manager, success_indices=None):
             f"{full_path}/last_time_points_no_outcome.pkl", 
             data_format='pkl'
         )
-        
-        # Filter to success indices if provided
-        if success_indices is not None:
-            logger.info(f"Filtering baseline dynamics to {len(success_indices)} successful samples")
-            dynamic_features_with_outcome = dynamic_features_with_outcome.iloc[success_indices].reset_index(drop=True)
-            last_time_points_with_outcome = last_time_points_with_outcome.iloc[success_indices].reset_index(drop=True)
-            dynamic_features_no_outcome = dynamic_features_no_outcome.iloc[success_indices].reset_index(drop=True)
-            last_time_points_no_outcome = last_time_points_no_outcome.iloc[success_indices].reset_index(drop=True)
         
         logger.info(f"✅ Loaded baseline dynamics for {model_name}")
         logger.info(f"  dynamic_features_with_outcome shape: {dynamic_features_with_outcome.shape}")
@@ -662,82 +525,54 @@ def process_single_model(model_name, s3_manager):
         
         # Use first N_SAMPLES from baseline (or all if N_SAMPLES > baseline_samples)
         # Note: check_baseline_exists already validated N_SAMPLES <= baseline_samples
-        baseline_features = baseline_data['features'].iloc[:N_SAMPLES].reset_index(drop=True)
-        baseline_targets = baseline_data['targets'].iloc[:N_SAMPLES].reset_index(drop=True)
+        baseline_features = baseline_data['features'].iloc[:N_SAMPLES]
+        baseline_targets = baseline_data['targets'].iloc[:N_SAMPLES]
         baseline_parameters = baseline_data['parameters']
         if baseline_parameters is not None:
-            baseline_parameters = baseline_parameters.iloc[:N_SAMPLES].reset_index(drop=True)
-        
-        # Get timecourses if available
-        baseline_timecourses = baseline_data.get('timecourses')
+            baseline_parameters = baseline_parameters.iloc[:N_SAMPLES]
+
         
         logger.info(f"✅ Using {N_SAMPLES} samples from shared baseline ({baseline_samples} total available)")
         logger.info(f"Baseline features shape: {baseline_features.shape}")
         logger.info(f"Baseline parameters shape: {baseline_parameters.shape if baseline_parameters is not None else 'N/A'}")
         logger.info(f"Baseline targets shape: {baseline_targets.shape}")
         
-        # Step 2: Identify samples that succeed at ALL noise levels
-        # For response noise, we're only adding noise to targets, so all samples should succeed
-        # But we should still verify with a small test
-        logger.info("Verifying all samples succeed with baseline parameters...")
-        
-        # Run a quick simulation to check for any CVODE errors
-        _, _, success_mask = make_target_data_with_params_robust(
-            model_spec=model_spec,
-            solver=solver,
-            feature_df=baseline_features,
-            parameter_df=baseline_parameters,
-            simulation_params=SIMULATION_PARAMS,
-            n_cores=1,
-            outcome_var=OUTCOME_VAR,
-            capture_all_species=True,
-            verbose=False
-        )
-        
-        success_indices = success_mask[success_mask].index.tolist()
-        logger.info(f"Found {len(success_indices)} successful samples out of {len(baseline_features)} total")
-        
-        if len(success_indices) == 0:
-            logger.error("❌ No samples succeeded. Cannot proceed.")
-            return False
+        # Step 2: Baseline data is already guaranteed to contain only successful samples
+        # (generated by generate-shared-baseline.py with failed samples removed)
+        # So we can use all samples directly without re-running simulations
+        logger.info(f"Using all {len(baseline_features)} baseline samples (already filtered during baseline generation)...")
         
         # Step 3: Save baseline targets (ground truth) for reference
         if UPLOAD_S3 and s3_manager:
-            # Filter baseline targets to only successful samples
-            baseline_targets_filtered = baseline_targets.loc[success_indices].reset_index(drop=True)
-            
+            # All baseline samples are successful (failed samples were removed during baseline generation)
             gen_path = s3_manager.save_result_path
             folder_name = f"{model_name}_response_noise_v1"
             baseline_targets_path = f"{gen_path}/data/{folder_name}/baseline_targets.pkl"
-            s3_manager.save_data_from_path(baseline_targets_path, baseline_targets_filtered, data_format="pkl")
+            s3_manager.save_data_from_path(baseline_targets_path, baseline_targets, data_format="pkl")
             logger.info(f"✅ Saved baseline targets (ground truth) to S3: {baseline_targets_path}")
         
-        # Step 3.5: Load baseline dynamics data for successful samples
+        # Step 3.5: Load baseline dynamics data (all samples are successful)
         logger.info("Loading baseline dynamics data...")
-        baseline_dynamics = load_baseline_dynamics(model_name, s3_manager, success_indices)
+        baseline_dynamics = load_baseline_dynamics(model_name, s3_manager)
         
-        # Step 4: Process each noise level with filtered successful samples
+        # Step 4: Process each noise level (all samples are successful)
         total_datasets = 0
         for noise_level in NOISE_LEVELS:
             logger.info(f"Processing noise level: {noise_level}")
             
-            # Apply response noise to target data (filtered to successful samples)
+            # Apply response noise to target data (all samples are successful)
             logger.info(f"Applying Gaussian noise (level={noise_level}) to target data...")
-            baseline_targets_filtered = baseline_targets.loc[success_indices].reset_index(drop=True)
-            baseline_features_filtered = baseline_features.loc[success_indices].reset_index(drop=True)
-            baseline_parameters_filtered = baseline_parameters.loc[success_indices].reset_index(drop=True)
             
             noisy_target_data = apply_response_noise(
-                baseline_targets_filtered, noise_level, SEED
+                baseline_targets, noise_level, SEED
             )
             
             # Generate complete dataset for this noise level using pre-computed baseline dynamics
             dataset_dict = generate_complete_dataset_for_noise_level(
                 clean_dataset={
-                    'features': baseline_features_filtered,
-                    'targets': baseline_targets_filtered,
-                    'parameters': baseline_parameters_filtered,
-                    'timecourse': baseline_timecourses.loc[success_indices].reset_index(drop=True) if isinstance(baseline_timecourses, pd.DataFrame) else baseline_timecourses,
+                    'features': baseline_features,
+                    'targets': baseline_targets,
+                    'parameters': baseline_parameters,
                     'metadata': None
                 },
                 noisy_target_data=noisy_target_data,
@@ -751,22 +586,10 @@ def process_single_model(model_name, s3_manager):
             total_datasets += 1
             logger.info(f"✅ Completed noise level {noise_level}")
         
-        # Save success indices for reference
+        # Note: All baseline samples are successful (failed samples were removed during baseline generation)
+        # Success rate is 100% by design
         if UPLOAD_S3 and s3_manager:
-            gen_path = s3_manager.save_result_path
-            folder_name = f"{model_name}_response_noise_v1"
-            
-            # Save success indices
-            success_path = f"{gen_path}/data/{folder_name}/success_indices.pkl"
-            s3_manager.save_data_from_path(success_path, success_indices, data_format="pkl")
-            
-            # Save success rate
-            success_rate = len(success_indices) / len(baseline_features)
-            rates_path = f"{gen_path}/data/{folder_name}/success_rate.pkl"
-            s3_manager.save_data_from_path(rates_path, success_rate, data_format="pkl")
-            
-            logger.info(f"✅ Saved success data to S3: {success_path}, {rates_path}")
-            logger.info(f"Success rate: {success_rate:.2%}")
+            logger.info("✅ All baseline samples successful (100% success rate)")
         
         logger.info(f"✅ Successfully processed model {model_name}: {total_datasets} datasets created")
         return True

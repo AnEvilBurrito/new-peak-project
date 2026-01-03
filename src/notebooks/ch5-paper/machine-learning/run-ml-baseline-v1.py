@@ -38,7 +38,7 @@ CSV_PATH = None  # Set to None for auto-discovery, or provide custom path: "path
 # When CSV_PATH is provided, the script will load the specified CSV file
 
 # Model configuration
-MODEL_NAMES = ["sy_simple", "v1"]  # List of model names to process
+MODEL_NAMES = ["sy_simple"]  # List of model names to process
 # Options:
 # MODEL_NAMES = ["sy_simple"]  # Single model
 # MODEL_NAMES = ["sy_simple", "v1", "fgfr4_model"]  # Multiple models

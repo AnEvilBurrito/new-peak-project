@@ -331,7 +331,7 @@ def generate_complete_dataset_for_noise_level(
     """
     logger.info(f"Generating complete dataset for noise level {noise_level}")
     
-    # Generate target and timecourse data with noisy features using robust version
+    # Step 1: Run simulation with NOISY features
     logger.info("Generating target and timecourse data with noisy features (robust)...")
     target_data, timecourse_data, success_mask = make_target_data_with_params_robust(
         model_spec=model_spec,
@@ -345,56 +345,24 @@ def generate_complete_dataset_for_noise_level(
         verbose=False
     )
     
-    # Filter all datasets to keep only successful samples
-    noisy_feature_data = noisy_feature_data[success_mask].reset_index(drop=True)
-    base_feature_data = base_feature_data[success_mask].reset_index(drop=True)
-    parameter_df = parameter_df[success_mask].reset_index(drop=True)
-    target_data = target_data.reset_index(drop=True)
+    # Filter ALL datasets using the SAME success_mask
+    noisy_feature_data_filtered = noisy_feature_data[success_mask].reset_index(drop=True)
+    base_feature_data_filtered = base_feature_data[success_mask].reset_index(drop=True)
+    parameter_df_filtered = parameter_df[success_mask].reset_index(drop=True)
     
-    # Reset timecourse data indices if it's a DataFrame
+    # target_data and timecourse_data are already filtered by make_target_data_with_params_robust
+    # Just reset indices
+    target_data = target_data.reset_index(drop=True)
     if isinstance(timecourse_data, pd.DataFrame):
         timecourse_data = timecourse_data.reset_index(drop=True)
     
-    # Calculate dynamic features
-    logger.info("Calculating dynamic features...")
-    initial_values = {k: v for k, v in model_builder.get_state_variables().items() if k.endswith('a')}
-    
-    dynamic_features = dynamic_features_method(
-        timecourse_data, 
-        selected_features=initial_values.keys(), 
-        n_cores=1, 
-        verbose=False
-    )
-    
-    last_time_points = last_time_point_method(
-        timecourse_data, 
-        selected_species=initial_values.keys()
-    )
-    
-    # Calculate dynamic features without outcome
-    states_no_outcome = {k: v for k, v in model_builder.get_state_variables().items() if k.endswith('a')}
-    if 'O' in states_no_outcome:
-        del states_no_outcome['O']
-    if 'Oa' in states_no_outcome:
-        del states_no_outcome['Oa']
-    dynamic_features_no_outcome = dynamic_features_method(
-        timecourse_data, 
-        selected_features=states_no_outcome.keys(), 
-        n_cores=1, 
-        verbose=False
-    )
-    
-    last_time_points_no_outcome = last_time_point_method(
-        timecourse_data, 
-        selected_species=states_no_outcome.keys()
-    )
-    
-    # Also include original features for comparison (using robust version)
-    original_target_data, original_timecourse_data, original_success_mask = make_target_data_with_params_robust(
+    # Step 2: Run simulation with ORIGINAL features (SAME filtered parameter_df)
+    logger.info("Generating target and timecourse data with original features (robust)...")
+    original_target_data, original_timecourse_data, _ = make_target_data_with_params_robust(
         model_spec=model_spec,
         solver=solver,
-        feature_df=base_feature_data,
-        parameter_df=parameter_df,
+        feature_df=base_feature_data_filtered,  # Use filtered base features
+        parameter_df=parameter_df_filtered,      # Use filtered parameters
         simulation_params=simulation_params,
         n_cores=1,
         outcome_var=OUTCOME_VAR,
@@ -402,21 +370,83 @@ def generate_complete_dataset_for_noise_level(
         verbose=False
     )
     
-    # Note: base_feature_data and parameter_df are already filtered by success_mask from noisy simulation
-    # Both should have the same success_mask since they use the same parameter_df
+    # Calculate dynamic features for BOTH timecourse datasets
+    logger.info("Calculating dynamic features...")
+    initial_values = {k: v for k, v in model_builder.get_state_variables().items() if k.endswith('a')}
+    
+    # Dynamic features from noisy simulation
+    dynamic_features = dynamic_features_method(
+        timecourse_data,
+        selected_features=initial_values.keys(),
+        n_cores=1,
+        verbose=False
+    )
+    
+    last_time_points = last_time_point_method(
+        timecourse_data,
+        selected_species=initial_values.keys()
+    )
+    
+    # Dynamic features from original simulation
+    original_dynamic_features = dynamic_features_method(
+        original_timecourse_data,
+        selected_features=initial_values.keys(),
+        n_cores=1,
+        verbose=False
+    )
+    
+    original_last_time_points = last_time_point_method(
+        original_timecourse_data,
+        selected_species=initial_values.keys()
+    )
+    
+    # Calculate dynamic features without outcome for BOTH datasets
+    states_no_outcome = {k: v for k, v in model_builder.get_state_variables().items() if k.endswith('a')}
+    if 'O' in states_no_outcome:
+        del states_no_outcome['O']
+    if 'Oa' in states_no_outcome:
+        del states_no_outcome['Oa']
+    
+    dynamic_features_no_outcome = dynamic_features_method(
+        timecourse_data,
+        selected_features=states_no_outcome.keys(),
+        n_cores=1,
+        verbose=False
+    )
+    
+    last_time_points_no_outcome = last_time_point_method(
+        timecourse_data,
+        selected_species=states_no_outcome.keys()
+    )
+    
+    original_dynamic_features_no_outcome = dynamic_features_method(
+        original_timecourse_data,
+        selected_features=states_no_outcome.keys(),
+        n_cores=1,
+        verbose=False
+    )
+    
+    original_last_time_points_no_outcome = last_time_point_method(
+        original_timecourse_data,
+        selected_species=states_no_outcome.keys()
+    )
     
     return {
-        'original_features': base_feature_data,
-        'noisy_features': noisy_feature_data,
+        'original_features': base_feature_data_filtered,
+        'noisy_features': noisy_feature_data_filtered,
         'targets': target_data,
-        'original_targets': original_target_data,
-        'parameters': parameter_df,
+        'original_targets': original_target_data.reset_index(drop=True),
+        'parameters': parameter_df_filtered,
         'timecourses': timecourse_data,
-        'original_timecourses': original_timecourse_data,
+        'original_timecourses': original_timecourse_data.reset_index(drop=True),
         'dynamic_features': dynamic_features,
         'last_time_points': last_time_points,
         'dynamic_features_no_outcome': dynamic_features_no_outcome,
-        'last_time_points_no_outcome': last_time_points_no_outcome
+        'last_time_points_no_outcome': last_time_points_no_outcome,
+        'original_dynamic_features': original_dynamic_features,
+        'original_last_time_points': original_last_time_points,
+        'original_dynamic_features_no_outcome': original_dynamic_features_no_outcome,
+        'original_last_time_points_no_outcome': original_last_time_points_no_outcome
     }
 
 

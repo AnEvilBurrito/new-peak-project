@@ -29,7 +29,7 @@
 
 # %%
 # Configuration variables - simplified for one model and one experiment
-EXPERIMENT_TYPE = "response-noise-v1"  # Single experiment type
+EXPERIMENT_TYPE = "parameter-distortion-v2"  # Single experiment type
 MODEL_NAME = "sy_simple"  # Single model name
 
 # Experiment type mapping to perturbation column names
@@ -229,17 +229,6 @@ def create_single_plot(df):
     Create one simple but informative plot.
     """
     fig, ax = plt.subplots(figsize=(9, 5))
-
-    # 1. Plot the overall average trend (thick line)
-    overall_avg = df.groupby("noise_level")["Pearson Correlation"].mean().reset_index()
-    ax.plot(
-        overall_avg["noise_level"],
-        overall_avg["Pearson Correlation"],
-        linewidth=4,
-        color="black",
-        alpha=0.7,
-        label="Overall Average",
-    )
 
     # 2. Plot each feature type with thinner lines
     for feature_type in df["feature_data_type"].unique():

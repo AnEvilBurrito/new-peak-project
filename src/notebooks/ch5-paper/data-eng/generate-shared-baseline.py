@@ -31,7 +31,7 @@ logger = logging.getLogger(__name__)
 
 # ===== CONFIGURATION SECTION =====
 # MODIFY THESE VARIABLES FOR YOUR BATCH JOB
-MODEL_NAME = ["sy_simple", "v1"]  # Can be string: "sy_simple" or list: ["sy_simple", "model_v2"]
+MODEL_NAME = "sy_simple"  # Can be string: "sy_simple" or list: ["sy_simple", "model_v2"]
 N_SAMPLES = 2000
 SEED = 42
 SIMULATION_PARAMS = {'start': 0, 'end': 10000, 'points': 101}

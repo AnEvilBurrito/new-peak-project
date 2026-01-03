@@ -520,7 +520,7 @@ def make_data(
     if model_spec is not None and solver is not None:
         # Set default simulation parameters
         if simulation_params is None:
-            simulation_params = {'start': 0, 'end': 500, 'points': 100}
+            raise ValueError('simulation_params must be provided when generating target data')
         
         # Validate simulation parameters
         if 'start' not in simulation_params or 'end' not in simulation_params or 'points' not in simulation_params:
@@ -529,7 +529,7 @@ def make_data(
         start = simulation_params['start']
         end = simulation_params['end']
         points = simulation_params['points']
-        outcome_var = kwargs.get('outcome_var', 'Cp')
+        outcome_var = kwargs.get('outcome_var', 'Oa')
         n_cores = kwargs.get('n_cores', 1)
         verbose = kwargs.get('verbose', False)
         
@@ -562,53 +562,6 @@ def make_data(
                 # If test simulation fails, we'll try to get species from actual simulations
                 warnings.warn(f"Could not discover species from test simulation: {e}")
                 species_to_capture = []
-        
-        def simulate_perturbation_single(i: int) -> Tuple[float, np.ndarray]:
-            """Simulate a single perturbation and capture only outcome_var."""
-            perturbed_values = feature_df.iloc[i].to_dict()
-            
-            # Set perturbed initial values into solver
-            solver.set_state_values(perturbed_values)
-            
-            # Set perturbed kinetic parameters if provided
-            if parameter_df is not None:
-                parameter_dict = parameter_df.iloc[i].to_dict()
-                solver.set_parameter_values(parameter_dict)
-            
-            # Run simulation
-            res = solver.simulate(start, end, points)
-            
-            # Extract target value and time course
-            target_value = res[outcome_var].iloc[-1]
-            time_course = res[outcome_var].values
-            
-            return target_value, time_course
-        
-        def simulate_perturbation_all_species(i: int) -> Tuple[float, Dict[str, np.ndarray]]:
-            """Simulate a single perturbation and capture timecourses for all species."""
-            perturbed_values = feature_df.iloc[i].to_dict()
-            
-            # Set perturbed initial values into solver
-            solver.set_state_values(perturbed_values)
-            
-            # Set perturbed kinetic parameters if provided
-            if parameter_df is not None:
-                parameter_dict = parameter_df.iloc[i].to_dict()
-                solver.set_parameter_values(parameter_dict)
-            
-            # Run simulation
-            res = solver.simulate(start, end, points)
-            
-            # Extract target value
-            target_value = res[outcome_var].iloc[-1]
-            
-            # Capture timecourses for all species
-            time_courses = {}
-            for species in species_to_capture:
-                if species in res.columns:
-                    time_courses[species] = res[species].values
-            
-            return target_value, time_courses
         
         def simulate_with_values_single(feature_values: Dict[str, float], param_values: Optional[Dict[str, float]] = None) -> Tuple[Optional[float], Optional[np.ndarray]]:
             """Simulate with given values and return result and timecourse for outcome_var only."""

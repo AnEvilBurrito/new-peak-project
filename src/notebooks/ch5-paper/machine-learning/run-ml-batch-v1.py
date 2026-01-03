@@ -38,7 +38,7 @@ CSV_PATH = None  # Set to None for auto-discovery, or provide custom path: "path
 # When CSV_PATH is provided, the script will load the specified CSV file
 
 # Experiment selection
-EXPERIMENT_TYPES = ["response-noise-v1"]  # List of experiment types to process
+EXPERIMENT_TYPES = ["parameter-distortion-v2"]  # List of experiment types to process
 # EXPERIMENT_TYPES = ["expression-noise-v1", "parameter-distortion-v2"]  # Multiple experiments
 # EXPERIMENT_TYPES = None  # Process ALL experiments in CSV
 

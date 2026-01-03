@@ -292,7 +292,7 @@ def make_target_data_with_params_robust(
             points = simulation_params['points']
             
             # Sequential simulation with error handling
-            for i in tqdm(range(feature_df.shape[0]), desc='Robust simulation', disable=not verbose):
+            for i in tqdm(range(feature_df.shape[0]), desc='Robust simulation'):
                 try:
                     # Get values for this sample
                     feature_values = feature_df.iloc[i].to_dict()
@@ -371,7 +371,7 @@ def generate_complete_dataset_for_distortion_level(
     solver,
     distortion_factor,
     simulation_params,
-    success_indices=None
+    success_indices
 ):
     """
     Generate complete dataset for a specific distortion level
@@ -390,58 +390,26 @@ def generate_complete_dataset_for_distortion_level(
     """
     logger.info(f"Generating complete dataset for distortion factor {distortion_factor}")
     
-    if success_indices is not None:
-        # Use pre-determined successful indices
-        logger.info(f"Using {len(success_indices)} pre-selected successful samples")
-        
-        # Filter data to only successful indices
-        feature_data_filtered = feature_data.iloc[success_indices].reset_index(drop=True)
-        parameter_df_filtered = parameter_df.iloc[success_indices].reset_index(drop=True)
-        
-        # Generate target data for filtered samples
-        target_data, timecourse_data, _ = make_target_data_with_params_robust(
-            model_spec=model_spec,
-            solver=solver,
-            feature_df=feature_data_filtered,
-            parameter_df=parameter_df_filtered,
-            simulation_params=simulation_params,
-            n_cores=1,
-            outcome_var=OUTCOME_VAR,
-            capture_all_species=True,
-            verbose=False
-        )
-        
-        # Reset indices
-        target_data = target_data.reset_index(drop=True)
-        if isinstance(timecourse_data, pd.DataFrame):
-            timecourse_data = timecourse_data.reset_index(drop=True)
-        
-        # Create success mask for internal tracking
-        success_mask = pd.Series([True] * len(success_indices))
-        
-    else:
-        # Generate target and timecourse data using robust version (original behavior)
-        logger.info("Generating target and timecourse data (robust)...")
-        target_data, timecourse_data, success_mask = make_target_data_with_params_robust(
-            model_spec=model_spec,
-            solver=solver,
-            feature_df=feature_data,
-            parameter_df=parameter_df,
-            simulation_params=simulation_params,
-            n_cores=1,
-            outcome_var=OUTCOME_VAR,
-            capture_all_species=True,
-            verbose=False
-        )
-        
-        # Filter all datasets to keep only successful samples
-        feature_data = feature_data[success_mask].reset_index(drop=True)
-        parameter_df = parameter_df[success_mask].reset_index(drop=True)
-        target_data = target_data.reset_index(drop=True)
-        
-        # Reset timecourse data indices if it's a DataFrame
-        if isinstance(timecourse_data, pd.DataFrame):
-            timecourse_data = timecourse_data.reset_index(drop=True)
+
+    # Use pre-determined successful indices
+    logger.info(f"Using {len(success_indices)} pre-selected successful samples")
+    
+    # Filter data to only successful indices
+    feature_data_filtered = feature_data.iloc[success_indices].reset_index(drop=True)
+    parameter_df_filtered = parameter_df.iloc[success_indices].reset_index(drop=True)
+    
+    # Generate target data for filtered samples
+    target_data, timecourse_data, _ = make_target_data_with_params_robust(
+        model_spec=model_spec,
+        solver=solver,
+        feature_df=feature_data_filtered,
+        parameter_df=parameter_df_filtered,
+        simulation_params=simulation_params,
+        n_cores=1,
+        outcome_var=OUTCOME_VAR,
+        capture_all_species=True,
+        verbose=False
+    )
     
     # Calculate dynamic features
     logger.info("Calculating dynamic features...")
@@ -503,15 +471,20 @@ def generate_complete_dataset_for_distortion_level(
     last_time_points = clip_dataframe(last_time_points, clipping_threshold)
     last_time_points_no_outcome = clip_dataframe(last_time_points_no_outcome, clipping_threshold)
     
+    
+    if success_indices is None:
+        feature_data_filtered = feature_data # 
+        parameter_df_filtered = parameter_df
+    
     return {
-        'features': feature_data,
-        'targets': target_data,
-        'parameters': parameter_df,
-        'timecourses': timecourse_data,
-        'dynamic_features': dynamic_features,
-        'last_time_points': last_time_points,
-        'dynamic_features_no_outcome': dynamic_features_no_outcome,
-        'last_time_points_no_outcome': last_time_points_no_outcome
+        "features": feature_data_filtered,
+        "targets": target_data,
+        "parameters": parameter_df_filtered,
+        "timecourses": timecourse_data,
+        "dynamic_features": dynamic_features,
+        "last_time_points": last_time_points,
+        "dynamic_features_no_outcome": dynamic_features_no_outcome,
+        "last_time_points_no_outcome": last_time_points_no_outcome,
     }
 
 

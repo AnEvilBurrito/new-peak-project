@@ -335,14 +335,14 @@ import pandas as pd
 plt.figure(figsize=(12, 6))
 
 # Calculate average R2 for each feature
-avg_r2 = ml_data_df.groupby("Feature Data")["R2 Score"].mean().sort_values(ascending=False)
+avg_r2 = ml_data_df.groupby("Feature Data")["Pearson Correlation"].mean().sort_values(ascending=False)
 
 # Plot
 plt.bar(range(len(avg_r2)), avg_r2.values, color="skyblue", edgecolor="navy")
 plt.xticks(range(len(avg_r2)), avg_r2.index, rotation=45, ha="right", fontsize=10)
-plt.ylabel("Average R2 Score", fontsize=12)
+plt.ylabel("Average Pearson Correlation", fontsize=12)
 plt.xlabel("Feature Data", fontsize=12)
-plt.title("Average R2 Score by Feature Data", fontsize=14, pad=20)
+plt.title("Average Pearson Correlation by Feature Data", fontsize=14, pad=20)
 plt.grid(axis="y", alpha=0.3, linestyle="--")
 plt.tight_layout()
 plt.show()

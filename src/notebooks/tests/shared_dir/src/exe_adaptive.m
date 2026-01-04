@@ -14,15 +14,18 @@ param_file      = 'true_parameters.csv';
 output_dir      = 'G:/My Drive/DAWSON PHD PROJECT/Biomarker Data Repository/data/new-peak-project/experiments/matlab_output';
 
 % Sampling settings
-distortion_scale = 4;
+% distortion_scale is now interpreted as standard deviation of relative error
+% p' = p * (1 + epsilon), epsilon ~ N(0, distortion_scale)
+distortion_scale = 0.2;  % 20% standard deviation (reasonable for Gaussian noise)
 max_attempts     = 50;
 random_seed      = 42;
 
 % Output files
-param_outfile       = fullfile(output_dir, 'distorted_params_4_test.csv');
-map_outfile         = fullfile(output_dir, 'param_ic_mapping_4_test.csv');
-skipped_log_file    = fullfile(output_dir, 'skipped_ics_log_4_test.txt');
-simulation_outfile  = fullfile(output_dir, 'adaptive_suboptimal_data_4_test.csv');  % new!
+scale_str = strrep(num2str(distortion_scale), '.', '_');
+param_outfile       = fullfile(output_dir, sprintf('distorted_params_%s_test.csv', scale_str));
+map_outfile         = fullfile(output_dir, sprintf('param_ic_mapping_%s_test.csv', scale_str));
+skipped_log_file    = fullfile(output_dir, sprintf('skipped_ics_log_%s_test.txt', scale_str));
+simulation_outfile  = fullfile(output_dir, sprintf('adaptive_suboptimal_data_%s_test.csv', scale_str));  % new!
 
 % Run adaptive sampling
 [params, mapping, total_tries, skipped, final_tbl] = adaptive_parameter_sampling( ...

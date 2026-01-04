@@ -1,7 +1,9 @@
 clear; clc; close all;
 
-% Distortion scales to loop over
-distortion_scales = [1.05, 1.1, 1.2, 1.3, 1.5, 2, 4, 10, 20];
+% Distortion factors to loop over (standard deviation of relative error)
+% Updated to match Python Gaussian multiplicative noise approach
+% distortion_factor = std dev of epsilon in: p' = p * (1 + epsilon), epsilon ~ N(0, distortion_factor)
+distortion_scales = [0.05, 0.1, 0.2, 0.3, 0.5, 1.0];
 
 % Load model
 model = 'FGFR4_model_rev2a_mex';

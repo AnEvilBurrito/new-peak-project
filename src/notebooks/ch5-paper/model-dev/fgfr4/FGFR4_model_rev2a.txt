@@ -1,0 +1,229 @@
+modelnoname()
+
+  # listOfCompartments
+  const compartment rootCompartment is "rootCompartment" = 1;
+
+  # listOfSpecies
+  substanceOnly species IGFR in rootCompartment is "IGFR" = 7.58;
+  substanceOnly species pIGFR in rootCompartment is "pIGFR" = 0;
+  substanceOnly species FGFR4 in rootCompartment is "FGFR4" = 962.77;
+  substanceOnly species pFGFR4 in rootCompartment is "pFGFR4" = 0;
+  substanceOnly species ERBB in rootCompartment is "ERBB" = 680.21;
+  substanceOnly species pERBB in rootCompartment is "pERBB" = 0;
+  substanceOnly species IRS in rootCompartment is "IRS" = 13.04;
+  substanceOnly species pIRS in rootCompartment is "pIRS" = 0;
+  substanceOnly species PI3K in rootCompartment is "PI3K" = 2.72;
+  substanceOnly species aPI3K in rootCompartment is "aPI3K" = 0;
+  substanceOnly species PIP2 in rootCompartment is "PIP2" = 5000;
+  substanceOnly species PIP3 in rootCompartment is "PIP3" = 0;
+  substanceOnly species FRS2 in rootCompartment is "FRS2" = 20.54;
+  substanceOnly species pFRS2 in rootCompartment is "pFRS2" = 0;
+  substanceOnly species Grb2 in rootCompartment is "Grb2" = 6436.64;
+  substanceOnly species aGrb2 in rootCompartment is "aGrb2" = 0;
+  substanceOnly species Akt in rootCompartment is "Akt" = 653.74;
+  substanceOnly species pAkt in rootCompartment is "pAkt" = 0;
+  substanceOnly species PDK1 in rootCompartment is "PDK1" = 39.24;
+  substanceOnly species aPDK1 in rootCompartment is "aPDK1" = 0;
+  substanceOnly species mTORC1 in rootCompartment is "mTORC1" = 13.17;
+  substanceOnly species amTORC1 in rootCompartment is "amTORC1" = 0;
+  substanceOnly species S6K in rootCompartment is "S6K" = 41.1;
+  substanceOnly species pS6K in rootCompartment is "pS6K" = 0;
+  substanceOnly species Sos in rootCompartment is "Sos" = 3.7;
+  substanceOnly species aSos in rootCompartment is "aSos" = 0;
+  substanceOnly species Shp2 in rootCompartment is "Shp2" = 270.39;
+  substanceOnly species aShp2 in rootCompartment is "aShp2" = 0;
+  substanceOnly species Ras in rootCompartment is "Ras" = 1813.21;
+  substanceOnly species aRas in rootCompartment is "aRas" = 0;
+  substanceOnly species Raf in rootCompartment is "Raf" = 27.49;
+  substanceOnly species aRaf in rootCompartment is "aRaf" = 0;
+  substanceOnly species MEK in rootCompartment is "MEK" = 1997.8;
+  substanceOnly species pMEK in rootCompartment is "pMEK" = 0;
+  substanceOnly species ERK in rootCompartment is "ERK" = 2054.4;
+  substanceOnly species pERK in rootCompartment is "pERK" = 0;
+  substanceOnly species GAB1 in rootCompartment is "GAB1" = 20.03;
+  substanceOnly species aGAB1 in rootCompartment is "aGAB1" = 0;
+  substanceOnly species GAB2 in rootCompartment is "GAB2" = 4.26;
+  substanceOnly species aGAB2 in rootCompartment is "aGAB2" = 0;
+  substanceOnly species mSPRY2 in rootCompartment is "mSPRY2" = 0;
+  substanceOnly species SPRY2 in rootCompartment is "SPRY2" = 0;
+  substanceOnly species pSPRY2 in rootCompartment is "pSPRY2" = 0;
+  substanceOnly species mPTP in rootCompartment is "mPTP" = 0;
+  substanceOnly species PTP in rootCompartment is "PTP" = 0;
+  substanceOnly species Cbl in rootCompartment is "Cbl" = 5.43;
+  substanceOnly species aCbl in rootCompartment is "aCbl" = 0;
+  substanceOnly species FOXO in rootCompartment is "FOXO" = 1025;
+  substanceOnly species pFOXO in rootCompartment is "pFOXO" = 1025;
+  substanceOnly species mTORC2 in rootCompartment is "mTORC2" = 13.17;
+  substanceOnly species amTORC2 in rootCompartment is "amTORC2" = 0;
+
+  # listOfParameters
+  const kc01f is "kc01f" = 0.01;
+  const Vm01r is "Vm01r" = 0.01;
+  const ki01r is "ki01r" = 1;
+  const kc02f is "kc02f" = 0.01;
+  const Ki02f is "Ki02f" = 1;
+  const Vm02r is "Vm02r" = 0.01;
+  const ki02r1 is "ki02r1" = 0.1;
+  const ki02r2 is "ki02r2" = 0.1;
+  const kc03f is "kc03f" = 0.01;
+  const Vm03r is "Vm03r" = 0.01;
+  const ki03r is "ki03r" = 0.1;
+  const kc04f is "kc04f" = 0.01;
+  const ki04f is "ki04f" = 1;
+  const Vm04r is "Vm04r" = 0.1;
+  const kc05f1 is "kc05f1" = 0.01;
+  const kc05f2 is "kc05f2" = 0.01;
+  const kc05f3 is "kc05f3" = 0.01;
+  const Vm05r is "Vm05r" = 0.1;
+  const kc06f is "kc06f" = 0.01;
+  const Ki06f is "Ki06f" = 1;
+  const kc06r is "kc06r" = 0.1;
+  const kc07f is "kc07f" = 0.01;
+  const Vm07r is "Vm07r" = 0.01;
+  const kc08f is "kc08f" = 0.01;
+  const Vm08r is "Vm08r" = 0.01;
+  const kc09f is "kc09f" = 0.01;
+  const Vm09r is "Vm09r" = 0.01;
+  const kc10f is "kc10f" = 0.01;
+  const Vm10r is "Vm10r" = 0.01;
+  const kc11f is "kc11f" = 0.01;
+  const ki11f is "ki11f" = 0.1;
+  const ki11r is "ki11r" = 0.1;
+  const Vm11r is "Vm11r" = 0.01;
+  const kc12f1 is "kc12f1" = 0.01;
+  const kc12f2 is "kc12f2" = 0.01;
+  const kc12f3 is "kc12f3" = 0.01;
+  const ki12f is "ki12f" = 0.1;
+  const Vm12r is "Vm12r" = 0.01;
+  const kc13f is "kc13f" = 0.01;
+  const Vm13r is "Vm13r" = 0.01;
+  const kc14f1 is "kc14f1" = 0.01;
+  const kc14f2 is "kc14f2" = 0.01;
+  const Vm14r is "Vm14r" = 0.01;
+  const kc15f1 is "kc15f1" = 0.01;
+  const kc15f2 is "kc15f2" = 0.01;
+  const ki15f is "ki15f" = 0.01;
+  const Vm15r is "Vm15r" = 0.01;
+  const kc16f is "kc16f" = 0.01;
+  const ki16f1 is "ki16f1" = 0.1;
+  const ki16f2 is "ki16f2" = 0.1;
+  const Vm16r is "Vm16r" = 0.1;
+  const kc17f is "kc17f" = 0.01;
+  const Vm17r is "Vm17r" = 0.01;
+  const kc18f is "kc18f" = 0.01;
+  const Vm18r is "Vm18r" = 0.01;
+  const kc19f is "kc19f" = 0.01;
+  const alpha19f is "alpha19f" = 0.1;
+  const ki19f is "ki19f" = 0.1;
+  const Vm19r is "Vm19r" = 0.01;
+  const kc20f is "kc20f" = 0.01;
+  const alpha20f is "alpha20f" = 0.1;
+  const ki20f1 is "ki20f1" = 0.1;
+  const ki20f2 is "ki20f2" = 0.1;
+  const Vm20r is "Vm20r" = 0.01;
+  const vs21 is "vs21" = 0.01;
+  const kc21 is "kc21" = 0.1;
+  const Km21 is "Km21" = 1;
+  const kc23 is "kc23" = 0.01;
+  const Km23 is "Km23" = 1;
+  const kc24 is "kc24" = 0.1;
+  const kc25f is "kc25f" = 0.01;
+  const kc25r is "kc25r" = 0.01;
+  const kc26 is "kc26" = 0.1;
+  const vs27 is "vs27" = 0.01;
+  const kc27a is "kc27a" = 0.1;
+  const Km27a is "Km27a" = 1;
+  const kc27b is "kc27b" = 0.01;
+  const Km27b is "Km27b" = 1;
+  const kc29 is "kc29" = 0.1;
+  const Km29 is "Km29" = 1;
+  const kc31f is "kc31f" = 0.01;
+  const Vm31r is "Vm31r" = 0.1;
+  const n02 is "n02" = 1;
+  const Kmf02 is "Kmf02" = 2;
+  const n06 is "n06" = 1;
+  const Kmf06 is "Kmf06" = 2;
+  const kc03f2 is "kc03f2" = 0.01;
+  const ki03f is "ki03f" = 0.01;
+  const Ki03f2 is "Ki03f2" = 0.01;
+  const kc05f4 is "kc05f4" = 0.01;
+  const kc32f is "kc32f" = 0.01;
+  const Vm32r is "Vm32r" = 0.01;
+  const Ki08f is "Ki08f" = 0.01;
+  const Ki17f is "Ki17f" = 0.01;
+  const kc33f is "kc33f" = 0.01;
+  const Vm33r is "Vm33r" = 0.01;
+  const kc08f1 is "kc08f1" = 0.01;
+  const ki33f is "ki33f" = 0.01;
+  const kc09f1 is "kc09f1" = 0.01;
+  const Kmf08 is "Kmf08" = 0.01;
+  const Kmf17 is "Kmf17" = 0.01;
+  const Kmf03 is "Kmf03" = 0.01;
+  const PTEN is "PTEN" = 9.54;
+  const IGF0 is "IGF0" = 1e-030;
+  const HRG0 is "HRG0" = 1e-030;
+  const FGF0 is "FGF0" = 1e-030;
+  const IGF_on is "IGF_on" = 5000;
+  const FGF_on is "FGF_on" = 5000;
+  const HRG_on is "HRG_on" = 5000;
+  const FGFR4i_0 is "FGFR4i_0" = 1e-030;
+  const PI3Ki_0 is "PI3Ki_0" = 1e-030;
+  const ERBBi_0 is "ERBBi_0" = 1e-030;
+  const AKTi_0 is "AKTi_0" = 1e-030;
+  const MEKi_0 is "MEKi_0" = 1e-030;
+  const inh_on is "inh_on" = 10000000000;
+  IGF is "IGF" = 0;
+  HRG is "HRG" = 0;
+  FGF is "FGF" = 0;
+  FGFR4i is "FGFR4i" = 0;
+  PI3Ki is "PI3Ki" = 0;
+  ERBBi is "ERBBi" = 0;
+  AKTi is "AKTi" = 0;
+  MEKi is "MEKi" = 0;
+
+  # listOfRules 
+  IGF := IGF0 * ifge0(time-IGF_on, 1, 0); # assignmentRule 
+  HRG := HRG0 * ifge0(time-HRG_on, 1, 0); # assignmentRule 
+  FGF := FGF0 * ifge0(time-FGF_on, 1, 0); # assignmentRule 
+  FGFR4i := FGFR4i_0 * ifge0(time-inh_on, 1, 0); # assignmentRule 
+  PI3Ki := PI3Ki_0 * ifge0(time-inh_on, 1, 0); # assignmentRule 
+  ERBBi := ERBBi_0 * ifge0(time-inh_on, 1, 0); # assignmentRule 
+  AKTi := AKTi_0 * ifge0(time-inh_on, 1, 0); # assignmentRule 
+  MEKi := MEKi_0 * ifge0(time-inh_on, 1, 0); # assignmentRule
+
+  # listOfReactions
+  v01 is "v01": IGFR => pIGFR; kc01f * IGF * IGFR - Vm01r *  (1 + ki01r * PTP)  * pIGFR
+  v02 is "v02": FGFR4 => pFGFR4; kc02f * FGF * FGFR4 /  (1 + Ki02f * pow(FGFR4i, n02) /  (pow(Kmf02, n02) + pow(FGFR4i, n02)) )  - Vm02r *  (1 + ki02r1 * PTP)  *  (1 + ki02r2 * aCbl)  * pFGFR4
+  v03 is "v03": ERBB => pERBB;  (kc03f * HRG + kc03f2 * FOXO)  * ERBB /  (1 + ki03f * pERK)  /  (1 + Ki03f2 * ERBBi /  (Kmf03 + ERBBi) )  - Vm03r *  (1 + ki03r * PTP)  * pERBB
+  v04 is "v04": IRS => pIRS; kc04f * pIGFR * IRS /  (1 + ki04f * pS6K)  - Vm04r * pIRS
+  v05 is "v05": PI3K => aPI3K;  (kc05f1 * pIRS + kc05f2 *  (aGAB1 + aGAB2)  + kc05f3 * aRas + kc05f4 * pERBB)  * PI3K /  (1 + Ki06f * pow(PI3Ki, n06) /  (pow(Kmf06, n06) + pow(PI3Ki, n06)) )  - Vm05r * aPI3K
+  v06 is "v06": PIP2 => PIP3; kc06f * aPI3K * PIP2 - kc06r * PTEN * PIP3
+  v07 is "v07": PDK1 => aPDK1; kc07f * PIP3 * PDK1 - Vm07r * aPDK1
+  v08 is "v08": Akt => pAkt;  (kc08f * aPDK1 + kc08f1 * amTORC2)  * Akt /  (1 + Ki08f * AKTi /  (Kmf08 + AKTi) )  - Vm08r * pAkt
+  v09 is "v09": mTORC1 => amTORC1;  (kc09f * pAkt + kc09f1 * pERK)  * mTORC1 - Vm09r * amTORC1
+  v10 is "v10": S6K => pS6K; kc10f * S6K * amTORC1 - Vm10r * pS6K
+  v11 is "v11": FRS2 => pFRS2; kc11f * pFGFR4 * FRS2 /  (1 + ki11r * pERK)  - Vm11r * pFRS2 *  (1 + ki11f * aCbl) 
+  v12 is "v12": Grb2 => aGrb2;  (kc12f1 * pFRS2 /  (1 + ki12f * pSPRY2)  + kc12f2 * pERBB + kc12f3 * pIRS)  * Grb2 - Vm12r * aGrb2
+  v13 is "v13": Sos => aSos; kc13f * Sos * aGrb2 - Vm13r * aSos
+  v14 is "v14": Shp2 => aShp2;  (kc14f1 * aGrb2 + kc14f2 *  (aGAB1 + aGAB2) )  * Shp2 - Vm14r * aShp2
+  v15 is "v15": Ras => aRas;  (kc15f1 * aSos /  (1 + ki15f * pERK)  + kc15f2 * aShp2)  * Ras - Vm15r * aRas
+  v16 is "v16": Raf => aRaf; kc16f * Raf * aRas /  (1 + ki16f1 * pAkt)  *  (1 + ki16f2 *  (SPRY2 + pSPRY2) )  - Vm16r * aRaf
+  v17 is "v17": MEK => pMEK; kc17f * MEK * aRaf /  (1 + Ki17f * MEKi /  (Kmf17 + MEKi) )  - Vm17r * pMEK
+  v18 is "v18": ERK => pERK; kc18f * ERK * pMEK - Vm18r * pERK
+  v19 is "v19": GAB1 => aGAB1; kc19f *  (1 + alpha19f * PIP3)  * aGrb2 * GAB1 /  (1 + ki19f * pERK)  - Vm19r * aGAB1
+  v20 is "v20": GAB2 => aGAB2; kc20f *  (1 + alpha20f * PIP3)  * aGrb2 * GAB2 /  (1 + ki20f1 * pERK)  *  (1 + ki20f2 * pAkt)  - Vm20r * aGAB2
+  v21 is "v21":  -> mSPRY2; vs21 + kc21 * pERK /  (Km21 + pERK) 
+  v22 is "v22": mSPRY2 -> ;  (vs21 + kc21)  / 100 * mSPRY2
+  v23 is "v23":  -> SPRY2; kc23 * mSPRY2 /  (Km23 + mSPRY2) 
+  v24 is "v24": SPRY2 -> ; kc24 * SPRY2
+  v25 is "v25": SPRY2 => pSPRY2; kc25f * SPRY2 * pFRS2 - kc25r * pSPRY2
+  v26 is "v26": pSPRY2 -> ; kc26 * pSPRY2
+  v27 is "v27":  -> mPTP; vs27 + kc27a * pERK /  (Km27a + pERK)  + kc27b * pAkt /  (Km27b + pAkt) 
+  v28 is "v28": mPTP -> ;  (vs27 + kc27a + kc27b)  / 100 * mPTP
+  v29 is "v29":  -> PTP; kc29 * mPTP /  (Km29 + mPTP) 
+  v30 is "v30": PTP -> ; kc29 / 100 * PTP
+  v31 is "v31": Cbl => aCbl; kc31f * aGrb2 * Cbl - Vm31r * aCbl
+  v32 is "v32": FOXO => pFOXO; kc32f * pAkt * FOXO - Vm32r * pFOXO
+  v33 is "v33": mTORC2 => amTORC2; kc33f * PIP3 * mTORC2 /  (1 + ki33f * pS6K)  - Vm33r * amTORC2
+
+end

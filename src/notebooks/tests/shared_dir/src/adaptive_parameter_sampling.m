@@ -21,10 +21,15 @@ function [accepted_params, param_ic_map, total_tries, skipped_ics, final_tbl] = 
     num_ic = size(x0_list, 1);
     num_params = numel(param_template_vals);
 
-    % Distortion bounds
-    min_scale = 1 / distortion_scale;
-    max_scale = distortion_scale;
-
+    % Gaussian multiplicative noise parameters
+    % distortion_scale is now interpreted as standard deviation (std) of relative error
+    % p' = p * (1 + epsilon), where epsilon ~ N(0, distortion_scale)
+    
+    % Warning for large distortion factors (like Python script)
+    if distortion_scale > 1.0
+        warning("distortion_scale=%f is large (>1.0 = 100%% std dev). Most parameters will change by more than 100%%.", distortion_scale);
+    end
+    
     % Output containers
     accepted_params = table();
     param_ic_map = [];
@@ -55,8 +60,15 @@ function [accepted_params, param_ic_map, total_tries, skipped_ics, final_tbl] = 
             attempt = attempt + 1;
             total_tries = total_tries + 1;
 
-            scale_factors = min_scale + (max_scale - min_scale) * rand(1, num_params);
-            distorted_vals = param_template_vals .* scale_factors;
+            % Generate Gaussian multiplicative noise
+            % epsilon ~ N(0, distortion_scale)
+            epsilon = normrnd(0, distortion_scale, 1, num_params);
+            
+            % Apply multiplicative noise: p' = p * (1 + epsilon)
+            distorted_vals = param_template_vals .* (1 + epsilon);
+            
+            % Ensure positivity (clip at 1e-8 like Python implementation)
+            distorted_vals = max(distorted_vals, 1e-8);
 
             try
                 [~, ~, ~] = run_simulation(distorted_vals(:)', x0s(:)', paramnames);

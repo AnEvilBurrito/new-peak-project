@@ -38,7 +38,7 @@ CSV_PATH = None  # Set to None for auto-discovery, or provide custom path: "path
 # When CSV_PATH is provided, the script will load the specified CSV file
 
 # Experiment selection
-EXPERIMENT_TYPES = ["expression-noise-v1"]  # List of experiment types to process
+EXPERIMENT_TYPES = ["response-noise-v1"]  # List of experiment types to process
 # EXPERIMENT_TYPES = ["expression-noise-v1", "parameter-distortion-v2"]  # Multiple experiments
 # EXPERIMENT_TYPES = None  # Process ALL experiments in CSV
 
@@ -57,7 +57,6 @@ N_JOBS = 4          # Number of parallel jobs (-1 for all cores)
 
 # Output configuration
 UPLOAD_S3 = True     # Upload results to S3 (True/False)
-SKIP_FAILED = True   # Skip failed tasks and continue processing
 
 # Notification configuration (matching data-eng scripts)
 SEND_NOTIFICATIONS = True   # Send ntfy notifications (True/False)
@@ -71,6 +70,7 @@ sys.path.insert(0, src_dir)
 
 from models.utils.s3_config_manager import S3ConfigManager
 from scripts.ntfy_notifier import notify_start, notify_success, notify_failure
+from ml.Workflow import batch_eval_standard_pairs
 
 # Import BatchLoader from the correct location - note the hyphen in the directory name
 # The file is at: src/notebooks/ch5-paper/data-eng/create-ml-loader-v1.py
@@ -101,20 +101,6 @@ def import_from_hyphenated_file(filepath, class_name):
 # Import BatchLoader from the create-ml-loader-v1.py file
 create_loader_path = os.path.join(current_dir, "../data-eng/create-ml-loader-v1.py")
 BatchLoader = import_from_hyphenated_file(create_loader_path, "BatchLoader")
-
-# Import batch_eval_standard from ml.Workflow
-# The ml directory is under src/ml/Workflow.py
-ml_dir = os.path.join(src_dir, "ml")
-sys.path.insert(0, ml_dir)
-
-# Try to import
-try:
-    from Workflow import batch_eval_standard
-except ImportError:
-    # Try alternative import path
-    sys.path.insert(0, os.path.join(src_dir, "ml"))
-    import Workflow
-    batch_eval_standard = Workflow.batch_eval_standard
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -202,6 +188,47 @@ def filter_tasks_by_model(df: pd.DataFrame, model_names: Optional[List[str]]) ->
     return filtered_df
 
 
+def prepare_data_from_task_df(task_df: pd.DataFrame, s3_manager: S3ConfigManager, target_column: str = "Oa"):
+    """
+    Prepare data for paired evaluation (1:1 feature-target).
+    
+    Returns:
+        Tuple of (feature_data_list, feature_data_names, 
+                 target_data_list, target_name_list)
+    """
+    feature_data_list = []
+    feature_data_names = []
+    target_data_list = []
+    target_name_list = []
+    
+    for _, row in task_df.iterrows():
+        try:
+            # Load feature data from S3
+            feature_path = f"{s3_manager.save_result_path}/data/{row['feature_data']}"
+            feature_df = s3_manager.load_data_from_path(feature_path, data_format="pkl")
+            
+            # Load target data from S3
+            target_path = f"{s3_manager.save_result_path}/data/{row['target_data']}"
+            target_df = s3_manager.load_data_from_path(target_path, data_format="pkl")
+            
+            # Validate target column
+            target_name = target_column
+            if target_column not in target_df.columns:
+                logger.warning(f"Target column '{target_column}' not found in {row['target_data']}. Using first column.")
+                target_name = target_df.columns[0]
+            
+            # Append to lists
+            feature_data_list.append(feature_df)
+            feature_data_names.append(row["feature_data_label"])
+            target_data_list.append(target_df)
+            target_name_list.append(target_name)
+            
+        except Exception as e:
+            logger.error(f"Error loading data for task {row['feature_data_label']}: {e}")
+            continue
+    
+    logger.info(f"Prepared {len(feature_data_list)} feature-target pairs")
+    return feature_data_list, feature_data_names, target_data_list, target_name_list
 
 
 def run_batch_evaluation_for_experiment(
@@ -219,29 +246,21 @@ def run_batch_evaluation_for_experiment(
     """
     logger.info(f"Starting batch evaluation for experiment: {experiment_type}")
     
-    # Initialize BatchLoader
-    loader = BatchLoader(s3_manager=s3_manager)
-    
-    # Create temporary CSV for this experiment
-    temp_csv = f"temp_{experiment_type}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
-    task_df.to_csv(temp_csv, index=False)
-    
     try:
-        # Load task list
-        loader.load_task_list(temp_csv)
+        # Prepare data for paired evaluation
+        feature_data_list, feature_data_names, target_data_list, target_name_list = prepare_data_from_task_df(
+            task_df=task_df,
+            s3_manager=s3_manager
+        )
         
-        # Prepare data for batch_eval
-        feature_data_list, feature_data_names, target_data, target_name = loader.prepare_for_batch_eval()
+        logger.info(f"Prepared {len(feature_data_list)} feature-target pairs for evaluation")
         
-        logger.info(f"Prepared {len(feature_data_list)} feature datasets for evaluation")
-        logger.info(f"Target column: {target_name}")
-        
-        # Run batch evaluation
-        results_df = batch_eval_standard(
+        # Run paired evaluation
+        results_df = batch_eval_standard_pairs(
             feature_data_list=feature_data_list,
             feature_data_names=feature_data_names,
-            target_data=target_data,
-            target_name=target_name,
+            target_data_list=target_data_list,
+            target_name_list=target_name_list,
             num_repeats=evaluation_params["num_repeats"],
             test_size=evaluation_params["test_size"],
             o_random_seed=evaluation_params["random_seed"],
@@ -296,11 +315,6 @@ def run_batch_evaluation_for_experiment(
         failed_tasks_df = task_df.copy()
         failed_tasks_df["error"] = str(e)
         failed_tasks_df["failed_timestamp"] = datetime.now().isoformat()
-        
-    finally:
-        # Clean up temporary file
-        if os.path.exists(temp_csv):
-            os.remove(temp_csv)
     
     return results_df, failed_tasks_df, metadata
 
@@ -386,7 +400,6 @@ def main():
     random_seed = RANDOM_SEED
     n_jobs = N_JOBS
     upload_s3 = UPLOAD_S3
-    skip_failed = SKIP_FAILED
     
     # Normalize model names to list format
     model_names_normalized = normalize_model_names(model_names)

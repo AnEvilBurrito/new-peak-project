@@ -40,6 +40,9 @@ from tqdm import tqdm
 # Import shared utilities for CSV generation
 from ml_task_utils import BaseTaskGenerator, save_task_csv, print_task_summary
 
+# Import shared utilities for combined feature generation
+from combined_feature_utils import create_combined_feature_sets
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -119,6 +122,22 @@ class ResponseNoiseTaskGenerator(BaseTaskGenerator):
             {
                 "path": f"{base_path}/last_time_points_no_outcome.pkl",
                 "label": f"last_time_points_no_outcome_{noise_level}"
+            },
+            {
+                "path": f"{base_path}/original_plus_dynamic_no_outcome.pkl",
+                "label": f"original_plus_dynamic_no_outcome_{noise_level}"
+            },
+            {
+                "path": f"{base_path}/original_plus_last_no_outcome.pkl",
+                "label": f"original_plus_last_no_outcome_{noise_level}"
+            },
+            {
+                "path": f"{base_path}/original_plus_dynamic_with_outcome.pkl",
+                "label": f"original_plus_dynamic_with_outcome_{noise_level}"
+            },
+            {
+                "path": f"{base_path}/original_plus_last_with_outcome.pkl",
+                "label": f"original_plus_last_with_outcome_{noise_level}"
             }
         ]
         
@@ -206,6 +225,16 @@ def generate_complete_dataset_for_noise_level(
     logger.info(f"Dynamic features (no outcome) shape: {dynamic_features_no_outcome.shape}")
     logger.info(f"Last time points (no outcome) shape: {last_time_points_no_outcome.shape}")
     
+    # Create combined feature sets
+    logger.info("Creating combined feature sets...")
+    combined_features = create_combined_feature_sets(
+        original_features=clean_dataset['features'],
+        dynamic_features_with_outcome=dynamic_features,
+        last_time_points_with_outcome=last_time_points,
+        dynamic_features_no_outcome=dynamic_features_no_outcome,
+        last_time_points_no_outcome=last_time_points_no_outcome
+    )
+    
     return {
         'features': clean_dataset['features'],
         'clean_targets': clean_dataset['targets'],
@@ -214,7 +243,8 @@ def generate_complete_dataset_for_noise_level(
         'dynamic_features': dynamic_features,
         'last_time_points': last_time_points,
         'dynamic_features_no_outcome': dynamic_features_no_outcome,
-        'last_time_points_no_outcome': last_time_points_no_outcome
+        'last_time_points_no_outcome': last_time_points_no_outcome,
+        'combined_features': combined_features
     }
 
 
@@ -254,6 +284,13 @@ def save_complete_dataset(dataset_dict, noise_level, model_name, s3_manager):
             s3_path = f"{full_path}/{filename}"
             s3_manager.save_data_from_path(s3_path, dataset_dict[key], data_format="pkl")
             logger.info(f"✅ Saved {key} to S3: {s3_path}")
+    
+    # Save combined feature sets
+    if 'combined_features' in dataset_dict and dataset_dict['combined_features']:
+        for combined_name, combined_df in dataset_dict['combined_features'].items():
+            s3_path = f"{full_path}/{combined_name}.pkl"
+            s3_manager.save_data_from_path(s3_path, combined_df, data_format="pkl")
+            logger.info(f"✅ Saved combined feature set to S3: {s3_path}")
     
     # Save metadata for this noise level
     metadata = {

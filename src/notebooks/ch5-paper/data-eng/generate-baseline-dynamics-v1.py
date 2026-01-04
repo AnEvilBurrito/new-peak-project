@@ -34,6 +34,9 @@ from scripts.ntfy_notifier import notify_start, notify_success, notify_failure
 from ml_task_utils import BaseTaskGenerator, save_task_csv, print_task_summary
 from baseline_dynamics_task_generator import BaselineDynamicsTaskGenerator
 
+# Import shared utilities for combined feature generation
+from combined_feature_utils import create_combined_feature_sets
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -200,122 +203,6 @@ def load_model_objects(model_name, s3_manager):
     return model_builder
 
 
-def create_combined_feature_sets(original_features, dynamic_features_with_outcome, 
-                                last_time_points_with_outcome, dynamic_features_no_outcome,
-                                last_time_points_no_outcome):
-    """
-    Create combined feature sets from individual feature sets.
-    
-    Args:
-        original_features: DataFrame of original features
-        dynamic_features_with_outcome: DataFrame of dynamic features with outcome
-        last_time_points_with_outcome: DataFrame of last time points with outcome
-        dynamic_features_no_outcome: DataFrame of dynamic features without outcome
-        last_time_points_no_outcome: DataFrame of last time points without outcome
-    
-    Returns:
-        Dictionary of combined feature DataFrames
-    """
-    logger.info("Creating combined feature sets...")
-    
-    # Validate all DataFrames have same shape and indices
-    feature_sets = {
-        'original': original_features,
-        'dynamic_with_outcome': dynamic_features_with_outcome,
-        'last_with_outcome': last_time_points_with_outcome,
-        'dynamic_no_outcome': dynamic_features_no_outcome,
-        'last_no_outcome': last_time_points_no_outcome
-    }
-    
-    # Check consistency
-    for name, df in feature_sets.items():
-        if df is None or len(df) == 0:
-            logger.warning(f"Empty DataFrame for {name}, skipping combinations")
-            return {}
-    
-    # Get reference shape and index
-    ref_shape = original_features.shape
-    ref_index = original_features.index
-    
-    for name, df in feature_sets.items():
-        if df.shape[0] != ref_shape[0]:
-            raise ValueError(f"Row count mismatch: {name} has {df.shape[0]} rows, original has {ref_shape[0]}")
-        if not df.index.equals(ref_index):
-            raise ValueError(f"Index mismatch for {name}")
-    
-    combined_sets = {}
-    
-    # Helper function to concatenate with smart suffixing
-    # Dynamic features already have descriptive suffixes (_auc, _median, etc.)
-    # Last time points need suffixes to identify them
-    # Original features need suffixes to distinguish from dynamic features
-    def concat_with_smart_suffix(df1, df2, df1_type="original", df2_type="dynamic_no_outcome"):
-        """
-        Concatenate DataFrames with intelligent suffixing based on feature type.
-        
-        Args:
-            df1: First DataFrame
-            df2: Second DataFrame  
-            df1_type: Type of features in df1 ('original', 'dynamic', 'last')
-            df2_type: Type of features in df2 ('original', 'dynamic', 'last')
-        """
-        # Map feature types to suffix strategies
-        suffix_strategies = {
-            'original': '_original',  # Original features need suffix
-            'dynamic_with_outcome': '',  # Dynamic features already have descriptive suffixes
-            'dynamic_no_outcome': '',    # Dynamic features already have descriptive suffixes
-            'last_with_outcome': '_last',  # Last time points need suffix
-            'last_no_outcome': '_last'      # Last time points need suffix
-        }
-        
-        suffix1 = suffix_strategies.get(df1_type, '')
-        suffix2 = suffix_strategies.get(df2_type, '')
-        
-        # Only add suffix if not empty
-        if suffix1:
-            df1_suffixed = df1.add_suffix(suffix1)
-        else:
-            df1_suffixed = df1
-            
-        if suffix2:
-            df2_suffixed = df2.add_suffix(suffix2)
-        else:
-            df2_suffixed = df2
-        
-        # Concatenate
-        combined = pd.concat([df1_suffixed, df2_suffixed], axis=1)
-        return combined
-    
-    # Create combined feature sets
-    # 1. Original + dynamic features without outcome (user's example)
-    combined_sets['original_plus_dynamic_no_outcome'] = concat_with_smart_suffix(
-        original_features, dynamic_features_no_outcome,
-        df1_type="original", df2_type="dynamic_no_outcome"
-    )
-    
-    # 2. Original + last time points without outcome
-    combined_sets['original_plus_last_no_outcome'] = concat_with_smart_suffix(
-        original_features, last_time_points_no_outcome,
-        df1_type="original", df2_type="last_no_outcome"
-    )
-    
-    # 3. Original + dynamic features with outcome
-    combined_sets['original_plus_dynamic_with_outcome'] = concat_with_smart_suffix(
-        original_features, dynamic_features_with_outcome,
-        df1_type="original", df2_type="dynamic_with_outcome"
-    )
-    
-    # 4. Original + last time points with outcome
-    combined_sets['original_plus_last_with_outcome'] = concat_with_smart_suffix(
-        original_features, last_time_points_with_outcome,
-        df1_type="original", df2_type="last_with_outcome"
-    )
-    
-    logger.info(f"Created {len(combined_sets)} combined feature sets")
-    for name, df in combined_sets.items():
-        logger.info(f"  {name}: shape {df.shape}")
-    
-    return combined_sets
 
 
 def save_baseline_dynamics_data(baseline_data, dynamic_features_tuple, model_name, s3_manager):

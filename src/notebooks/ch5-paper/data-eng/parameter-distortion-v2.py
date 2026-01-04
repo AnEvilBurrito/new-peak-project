@@ -42,6 +42,9 @@ import warnings
 # Import shared utilities for CSV generation
 from ml_task_utils import BaseTaskGenerator, save_task_csv, print_task_summary
 
+# Import shared utilities for combined feature generation
+from combined_feature_utils import create_combined_feature_sets
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -121,6 +124,22 @@ class ParameterDistortionTaskGenerator(BaseTaskGenerator):
             {
                 "path": f"{base_path}/last_time_points_no_outcome.pkl",
                 "label": f"last_time_points_no_outcome_{distortion_factor}"
+            },
+            {
+                "path": f"{base_path}/original_plus_dynamic_no_outcome.pkl",
+                "label": f"original_plus_dynamic_no_outcome_{distortion_factor}"
+            },
+            {
+                "path": f"{base_path}/original_plus_last_no_outcome.pkl",
+                "label": f"original_plus_last_no_outcome_{distortion_factor}"
+            },
+            {
+                "path": f"{base_path}/original_plus_dynamic_with_outcome.pkl",
+                "label": f"original_plus_dynamic_with_outcome_{distortion_factor}"
+            },
+            {
+                "path": f"{base_path}/original_plus_last_with_outcome.pkl",
+                "label": f"original_plus_last_with_outcome_{distortion_factor}"
             }
         ]
         
@@ -471,6 +490,15 @@ def generate_complete_dataset_for_distortion_level(
     last_time_points = clip_dataframe(last_time_points, clipping_threshold)
     last_time_points_no_outcome = clip_dataframe(last_time_points_no_outcome, clipping_threshold)
     
+    # Create combined feature sets
+    logger.info("Creating combined feature sets...")
+    combined_features = create_combined_feature_sets(
+        original_features=feature_data_filtered,
+        dynamic_features_with_outcome=dynamic_features,
+        last_time_points_with_outcome=last_time_points,
+        dynamic_features_no_outcome=dynamic_features_no_outcome,
+        last_time_points_no_outcome=last_time_points_no_outcome
+    )
     
     if success_indices is None:
         feature_data_filtered = feature_data # 
@@ -485,6 +513,7 @@ def generate_complete_dataset_for_distortion_level(
         "last_time_points": last_time_points,
         "dynamic_features_no_outcome": dynamic_features_no_outcome,
         "last_time_points_no_outcome": last_time_points_no_outcome,
+        "combined_features": combined_features
     }
 
 
@@ -524,6 +553,13 @@ def save_complete_dataset(dataset_dict, distortion_factor, model_name, s3_manage
             s3_path = f"{full_path}/{filename}"
             s3_manager.save_data_from_path(s3_path, dataset_dict[key], data_format="pkl")
             logger.info(f"✅ Saved {key} to S3: {s3_path}")
+    
+    # Save combined feature sets
+    if 'combined_features' in dataset_dict and dataset_dict['combined_features']:
+        for combined_name, combined_df in dataset_dict['combined_features'].items():
+            s3_path = f"{full_path}/{combined_name}.pkl"
+            s3_manager.save_data_from_path(s3_path, combined_df, data_format="pkl")
+            logger.info(f"✅ Saved combined feature set to S3: {s3_path}")
     
     # Save metadata for this distortion level
     metadata = {

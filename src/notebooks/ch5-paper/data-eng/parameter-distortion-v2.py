@@ -660,30 +660,27 @@ def generate_csv_task_list():
                         "model_name": model_name
                     })
         
+        # Save per-model CSV
+        if task_rows:
+            model_task_df = pd.DataFrame(task_rows)
+            if UPLOAD_S3 and s3_manager:
+                folder_name = generator.get_base_folder()
+                gen_path = s3_manager.save_result_path
+                s3_csv_path = f"{gen_path}/data/{folder_name}/task_list.csv"
+                s3_manager.save_data_from_path(s3_csv_path, model_task_df, data_format="csv")
+                logger.info(f"✅ Uploaded per-model CSV to S3: {s3_csv_path}")
+        
         all_task_rows.extend(task_rows)
         logger.info(f"Generated {len(task_rows)} tasks for model {model_name}")
     
-    # Save combined task list
+    # Create combined DataFrame for return (no longer saved to S3)
     if all_task_rows:
         task_df = pd.DataFrame(all_task_rows)
         
-        # Upload to S3 if enabled
-        if UPLOAD_S3 and s3_manager:
-            output_csv = "task_list.csv"
-            folder_name = generator.get_base_folder() if 'generator' in locals() else f"{model_names[0]}_parameter_distortion_v2"
-            gen_path = s3_manager.save_result_path
-            s3_csv_path = f"{gen_path}/data/{folder_name}/{output_csv}"
-            
-            s3_manager.save_data_from_path(s3_csv_path, task_df, data_format="csv")
-            logger.info(f"✅ Uploaded CSV to S3: {s3_csv_path}")
-            
-            if len(model_names) > 1:
-                print_task_summary(task_df)
-            
-            return task_df
-        else:
-            logger.info("Skipping CSV save (UPLOAD_S3=False or no S3 manager)")
-            return pd.DataFrame()
+        if len(model_names) > 1:
+            print_task_summary(task_df)
+        
+        return task_df
     else:
         logger.warning("No tasks generated")
         return pd.DataFrame()

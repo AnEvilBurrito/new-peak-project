@@ -45,16 +45,24 @@ class BaselineDynamicsTaskGenerator(BaseTaskGenerator):
         """
         Get feature files for baseline data.
         
-        Returns five feature types:
+        Returns five individual feature types plus four combined feature types.
+        
+        Individual feature types:
         1. Original features from baseline virtual models
         2. Dynamic features with outcome variable
         3. Last time points with outcome variable
         4. Dynamic features without outcome variable
         5. Last time points without outcome variable
+        
+        Combined feature types:
+        6. Original + dynamic features without outcome
+        7. Original + last time points without outcome
+        8. Original + dynamic features with outcome
+        9. Original + last time points with outcome
         """
         base_path = self.get_base_folder()
         
-        return [
+        individual_files = [
             {
                 "path": f"{base_path}/original_features.pkl",
                 "label": "original_features"
@@ -76,6 +84,27 @@ class BaselineDynamicsTaskGenerator(BaseTaskGenerator):
                 "label": "last_time_points_no_outcome"
             }
         ]
+        
+        combined_files = [
+            {
+                "path": f"{base_path}/original_plus_dynamic_no_outcome.pkl",
+                "label": "original_plus_dynamic_no_outcome"
+            },
+            {
+                "path": f"{base_path}/original_plus_last_no_outcome.pkl",
+                "label": "original_plus_last_no_outcome"
+            },
+            {
+                "path": f"{base_path}/original_plus_dynamic_with_outcome.pkl",
+                "label": "original_plus_dynamic_with_outcome"
+            },
+            {
+                "path": f"{base_path}/original_plus_last_with_outcome.pkl",
+                "label": "original_plus_last_with_outcome"
+            }
+        ]
+        
+        return individual_files + combined_files
         
     def get_target_files(self, level: Any) -> List[Dict[str, str]]:
         """Get target files for baseline data."""

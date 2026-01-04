@@ -200,6 +200,124 @@ def load_model_objects(model_name, s3_manager):
     return model_builder
 
 
+def create_combined_feature_sets(original_features, dynamic_features_with_outcome, 
+                                last_time_points_with_outcome, dynamic_features_no_outcome,
+                                last_time_points_no_outcome):
+    """
+    Create combined feature sets from individual feature sets.
+    
+    Args:
+        original_features: DataFrame of original features
+        dynamic_features_with_outcome: DataFrame of dynamic features with outcome
+        last_time_points_with_outcome: DataFrame of last time points with outcome
+        dynamic_features_no_outcome: DataFrame of dynamic features without outcome
+        last_time_points_no_outcome: DataFrame of last time points without outcome
+    
+    Returns:
+        Dictionary of combined feature DataFrames
+    """
+    logger.info("Creating combined feature sets...")
+    
+    # Validate all DataFrames have same shape and indices
+    feature_sets = {
+        'original': original_features,
+        'dynamic_with_outcome': dynamic_features_with_outcome,
+        'last_with_outcome': last_time_points_with_outcome,
+        'dynamic_no_outcome': dynamic_features_no_outcome,
+        'last_no_outcome': last_time_points_no_outcome
+    }
+    
+    # Check consistency
+    for name, df in feature_sets.items():
+        if df is None or len(df) == 0:
+            logger.warning(f"Empty DataFrame for {name}, skipping combinations")
+            return {}
+    
+    # Get reference shape and index
+    ref_shape = original_features.shape
+    ref_index = original_features.index
+    
+    for name, df in feature_sets.items():
+        if df.shape[0] != ref_shape[0]:
+            raise ValueError(f"Row count mismatch: {name} has {df.shape[0]} rows, original has {ref_shape[0]}")
+        if not df.index.equals(ref_index):
+            raise ValueError(f"Index mismatch for {name}")
+    
+    combined_sets = {}
+    
+    # Helper function to concatenate with smart suffixing
+    # Dynamic features already have descriptive suffixes (_auc, _median, etc.)
+    # Last time points need suffixes to identify them
+    # Original features need suffixes to distinguish from dynamic features
+    def concat_with_smart_suffix(df1, df2, df1_type="original", df2_type="dynamic_no_outcome"):
+        """
+        Concatenate DataFrames with intelligent suffixing based on feature type.
+        
+        Args:
+            df1: First DataFrame
+            df2: Second DataFrame  
+            df1_type: Type of features in df1 ('original', 'dynamic', 'last')
+            df2_type: Type of features in df2 ('original', 'dynamic', 'last')
+        """
+        # Map feature types to suffix strategies
+        suffix_strategies = {
+            'original': '_original',  # Original features need suffix
+            'dynamic_with_outcome': '',  # Dynamic features already have descriptive suffixes
+            'dynamic_no_outcome': '',    # Dynamic features already have descriptive suffixes
+            'last_with_outcome': '_last',  # Last time points need suffix
+            'last_no_outcome': '_last'      # Last time points need suffix
+        }
+        
+        suffix1 = suffix_strategies.get(df1_type, '')
+        suffix2 = suffix_strategies.get(df2_type, '')
+        
+        # Only add suffix if not empty
+        if suffix1:
+            df1_suffixed = df1.add_suffix(suffix1)
+        else:
+            df1_suffixed = df1
+            
+        if suffix2:
+            df2_suffixed = df2.add_suffix(suffix2)
+        else:
+            df2_suffixed = df2
+        
+        # Concatenate
+        combined = pd.concat([df1_suffixed, df2_suffixed], axis=1)
+        return combined
+    
+    # Create combined feature sets
+    # 1. Original + dynamic features without outcome (user's example)
+    combined_sets['original_plus_dynamic_no_outcome'] = concat_with_smart_suffix(
+        original_features, dynamic_features_no_outcome,
+        df1_type="original", df2_type="dynamic_no_outcome"
+    )
+    
+    # 2. Original + last time points without outcome
+    combined_sets['original_plus_last_no_outcome'] = concat_with_smart_suffix(
+        original_features, last_time_points_no_outcome,
+        df1_type="original", df2_type="last_no_outcome"
+    )
+    
+    # 3. Original + dynamic features with outcome
+    combined_sets['original_plus_dynamic_with_outcome'] = concat_with_smart_suffix(
+        original_features, dynamic_features_with_outcome,
+        df1_type="original", df2_type="dynamic_with_outcome"
+    )
+    
+    # 4. Original + last time points with outcome
+    combined_sets['original_plus_last_with_outcome'] = concat_with_smart_suffix(
+        original_features, last_time_points_with_outcome,
+        df1_type="original", df2_type="last_with_outcome"
+    )
+    
+    logger.info(f"Created {len(combined_sets)} combined feature sets")
+    for name, df in combined_sets.items():
+        logger.info(f"  {name}: shape {df.shape}")
+    
+    return combined_sets
+
+
 def save_baseline_dynamics_data(baseline_data, dynamic_features_tuple, model_name, s3_manager):
     """
     Save baseline dynamics datasets to S3 (with and without outcome versions).
@@ -282,18 +400,42 @@ def save_baseline_dynamics_data(baseline_data, dynamic_features_tuple, model_nam
         )
         logger.info(f"✅ Saved timecourses to S3: {full_path}/timecourses.pkl")
     
+    # Create and save combined feature sets
+    combined_features = create_combined_feature_sets(
+        original_features=original_features,
+        dynamic_features_with_outcome=dynamic_features_with_outcome,
+        last_time_points_with_outcome=last_time_points_with_outcome,
+        dynamic_features_no_outcome=dynamic_features_no_outcome,
+        last_time_points_no_outcome=last_time_points_no_outcome
+    )
+    
+    # Save combined feature sets
+    for combined_name, combined_df in combined_features.items():
+        s3_path = f"{full_path}/{combined_name}.pkl"
+        s3_manager.save_data_from_path(s3_path, combined_df, data_format="pkl")
+        logger.info(f"✅ Saved combined feature set to S3: {s3_path}")
+    
     # Save metadata
+    all_feature_types = [
+        'original_features', 
+        'dynamic_features_with_outcome', 
+        'last_time_points_with_outcome',
+        'dynamic_features_no_outcome', 
+        'last_time_points_no_outcome'
+    ]
+    
+    # Add combined feature types to metadata
+    if combined_features:
+        combined_names = list(combined_features.keys())
+        all_feature_types.extend(combined_names)
+    
     metadata = {
         'model_name': model_name,
         'n_samples': len(original_features),
         'generation_timestamp': datetime.now().isoformat(),
-        'feature_types': [
-            'original_features', 
-            'dynamic_features_with_outcome', 
-            'last_time_points_with_outcome',
-            'dynamic_features_no_outcome', 
-            'last_time_points_no_outcome'
-        ],
+        'feature_types': all_feature_types,
+        'combined_feature_sets_generated': bool(combined_features),
+        'combined_feature_set_names': list(combined_features.keys()) if combined_features else [],
         'source_baseline': f"{model_name}_baseline_virtual_models",
         'script_version': 'generate-baseline-dynamics-v1.py',
         'outcome_variable_included': 'Oa' if 'Oa' in dynamic_features_with_outcome.columns.str.split('_').str[0].unique() else 'unknown'

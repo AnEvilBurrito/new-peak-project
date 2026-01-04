@@ -105,6 +105,12 @@ ResponseNoiseTaskGenerator = import_from_hyphenated_file(
     "ResponseNoiseTaskGenerator"
 )
 
+# Import baseline dynamics task generator
+BaselineDynamicsTaskGenerator = import_from_hyphenated_file(
+    os.path.join(current_dir, "baseline_dynamics_task_generator.py"),
+    "BaselineDynamicsTaskGenerator"
+)
+
 
 class BatchTaskGenerator:
     """Generates CSV task lists for ML batch evaluation"""
@@ -114,7 +120,8 @@ class BatchTaskGenerator:
         self.experiment_generators = {
             "expression-noise-v1": ExpressionNoiseTaskGenerator,
             "parameter-distortion-v2": ParameterDistortionTaskGenerator,
-            "response-noise-v1": ResponseNoiseTaskGenerator
+            "response-noise-v1": ResponseNoiseTaskGenerator,
+            "baseline-dynamics-v1": BaselineDynamicsTaskGenerator
         }
         
     def register_generator(self, name: str, generator_class):

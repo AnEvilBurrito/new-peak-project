@@ -29,7 +29,7 @@
 
 # %%
 # Configuration variables - simplified for one model and one experiment
-EXPERIMENT_TYPE = "response-noise-v1"  # Single experiment type
+EXPERIMENT_TYPE = "parameter-distortion-v2"  # Single experiment type
 MODEL_NAME = "sy_simple"  # Single model name
 
 # Experiment type mapping to perturbation column names

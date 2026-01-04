@@ -30,7 +30,9 @@ print(f'Project path set to: {os.getcwd()}')
 
 # %%
 from dotenv import dotenv_values
-config = dotenv_values(".env")
+config = {
+    "DATA_PATH": "I:\\My Drive\\DAWSON PHD PROJECT\\Biomarker Data Repository\\data\\new-peak-project\\experiments"
+}
 print(config["DATA_PATH"])
 
 # %% [markdown]
@@ -43,12 +45,14 @@ from models.Utils import last_time_point_method, dynamic_features_method
 import pandas as pd 
 import pickle
 
-distortion_scales = [1.05, 1.1, 1.2, 1.3, 1.5, 2, 4, 10, 20]
+# distortion_scales = [0.05, 0.1, 0.2, 0.3, 0.5, 1] # version = "2026-01-v1"
+distortion_scales = [0.05, 1, 2, 3, 5, 7, 10] # version = "2026-01-v2"
 filename_label = 'adaptive_suboptimal_data'
+version = "2026-01-v2"
 simulation_datasets = []
 for scale in distortion_scales:
     str_scale = str(scale)
-    sim_data = pd.read_csv(f'{config["DATA_PATH"]}/matlab_output/{filename_label}_{str_scale}.csv', index_col=0)
+    sim_data = pd.read_csv(f'{config["DATA_PATH"]}/matlab_output/{version}/{filename_label}_{str_scale}.csv', index_col=0)
     simulation_datasets.append(sim_data)
 
 feature_data_file_path = f'notebooks/tests/shared_dir/src/feature_data.pkl'
@@ -105,7 +109,7 @@ for i, sim_data in enumerate(simulation_datasets):
     suboptimal_feature_data_lists.append([feature_data, last_time_data, dynamic_data, combined_lp_data, combined_dyn_data])
 
 
-output_file_path = f'{config["DATA_PATH"]}/matlab_output/exp23_eval_results.pkl' 
+output_file_path = f'{config["DATA_PATH"]}/matlab_output/{version}/exp23_eval_results.pkl' 
 
 # %% [markdown]
 # ## Machine Learning 
@@ -117,7 +121,6 @@ from ml.Workflow import batch_eval_standard
 
 # add 1 into distortion_scales to match the number of feature data lists
 distortion_scales_modified = distortion_scales.copy()
-distortion_scales_modified.insert(0, 1.0)  # Add ground truth scale at the beginning
 
 all_results = []
 for i, scale in enumerate(distortion_scales_modified):
@@ -131,7 +134,7 @@ for i, scale in enumerate(distortion_scales_modified):
         num_repeats=10,
         test_size=0.2,
         o_random_seed=o_random_seed,
-        n_jobs=-1
+        n_jobs=8
     )
     metric_df["distortion_scale"] = scale
     all_results.append(metric_df)
@@ -150,26 +153,45 @@ print(f"Results saved to {output_file_path}")
 # load the results
 with open(output_file_path, 'rb') as f:
     results_df = pickle.load(f)
-    
+
 
 # %%
 results_df
+
+# %%
+results_df.info()
 
 # %%
 import matplotlib.pyplot as plt
 import seaborn as sns
 import matplotlib
 
-# Plot setup
-plt.figure(figsize=(12, 6), dpi=300)
+# Set up plot appearance
 sns.set_context("talk", font_scale=1)
 sns.set_style("whitegrid")
 matplotlib.rcParams['font.family'] = 'Arial'
 
-sns.lineplot(data=results_df, x='distortion_scale', y='Pearson Correlation', hue='Feature Data', palette='Set1', marker='o')
-# 90 degree rotation of the x-axis labels
-# legend to the right
-plt.legend(title='Type of data', bbox_to_anchor=(1.05, 1), loc='upper left')
+# Use relplot to stratify by Model, with at least 2 columns
+g = sns.relplot(
+    data=results_df,
+    x="distortion_scale",
+    y="Pearson Correlation",
+    hue="Feature Data",
+    kind="line",
+    col="Model",
+    col_wrap=3,
+    marker="o",
+    facet_kws={"sharey": True},
+)
+
+g.set_axis_labels('Distortion Scale', 'ML Accuracy')
+g.set_titles('{col_name}')
+for ax in g.axes.flat:
+    for label in ax.get_xticklabels():
+        label.set_rotation(0)
+g._legend.set_title('Type of data')
+g._legend.set_bbox_to_anchor((0.9, 0.3))
+plt.tight_layout()
 plt.show()
 
 # %%
@@ -180,6 +202,8 @@ import seaborn as sns
 plot_data = results_df.copy()
 # filter out plot data where distortion_scale is above 5
 # plot_data = plot_data[plot_data['distortion_scale'] <= 5]
+
+plot_data = plot_data[plot_data['Model'] == 'Random Forest']
 
 
 plot_data['Feature Data'] = plot_data['Feature Data'].replace({
